@@ -7,3 +7,6 @@ dist/
 .DS_Store
 .claude/
 CLAUDE.md
+contracts/lib/
+contracts/out/
+contracts/cache/
