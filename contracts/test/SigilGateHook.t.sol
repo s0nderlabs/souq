@@ -7,7 +7,6 @@ import "../src/SigilGateHook.sol";
 import "./mocks/MockERC20.sol";
 import "./mocks/MockSigil.sol";
 import "./mocks/MockIdentityRegistry.sol";
-import "./mocks/MockReputationRegistry.sol";
 
 contract SigilGateHookTest is Test {
     AgenticJobEscrow escrow;
@@ -15,7 +14,6 @@ contract SigilGateHookTest is Test {
     MockERC20 usdt;
     MockSigil sigil;
     MockIdentityRegistry identity;
-    MockReputationRegistry reputation;
 
     address client = address(0xC1);
     address provider = address(0xB0);
@@ -30,7 +28,10 @@ contract SigilGateHookTest is Test {
     uint256 constant BUDGET = 1000e6;
 
     bytes32 constant PROVIDER_POLICY = keccak256("souq-provider");
+    bytes32 constant PROVIDER_POLICY_2 = keccak256("research-compliance");
+    bytes32 constant PROVIDER_POLICY_3 = keccak256("defi-experience");
     bytes32 constant EVALUATOR_POLICY = keccak256("souq-evaluator");
+    bytes32 constant EVALUATOR_POLICY_2 = keccak256("evaluator-advanced");
     bytes32 constant DESC = keccak256("research report");
     bytes32 constant DELIVERABLE = keccak256("ipfs://QmDeliverable");
     bytes32 constant REASON = keccak256("good work");
@@ -39,19 +40,13 @@ contract SigilGateHookTest is Test {
         usdt = new MockERC20("USDT", "USDT", 6);
         sigil = new MockSigil();
         identity = new MockIdentityRegistry();
-        reputation = new MockReputationRegistry();
 
-        // Deploy escrow first (with a temp hook address — will set real hook per job)
         escrow = new AgenticJobEscrow(address(usdt), treasury, 500, owner);
 
-        // Deploy hook with escrow address
         hook = new SigilGateHook(
             address(escrow),
             address(sigil),
-            address(identity),
-            address(reputation),
-            PROVIDER_POLICY,
-            EVALUATOR_POLICY
+            address(identity)
         );
 
         // Setup agentId ownership
@@ -59,7 +54,7 @@ contract SigilGateHookTest is Test {
         identity.setOwner(PROVIDER_AGENT_ID, provider);
         identity.setOwner(EVALUATOR_AGENT_ID, evaluator);
 
-        // Setup Sigil compliance
+        // Setup Sigil compliance (default: one policy each)
         sigil.setCompliance(provider, PROVIDER_POLICY, true);
         sigil.setCompliance(evaluator, EVALUATOR_POLICY, true);
 
@@ -73,12 +68,30 @@ contract SigilGateHookTest is Test {
     // Helpers
     // ──────────────────────────────────────────────
 
+    function _providerPolicies() internal pure returns (bytes32[] memory) {
+        bytes32[] memory p = new bytes32[](1);
+        p[0] = PROVIDER_POLICY;
+        return p;
+    }
+
+    function _evaluatorPolicies() internal pure returns (bytes32[] memory) {
+        bytes32[] memory p = new bytes32[](1);
+        p[0] = EVALUATOR_POLICY;
+        return p;
+    }
+
     function _optParams() internal pure returns (bytes memory) {
-        return abi.encode(CLIENT_AGENT_ID, PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID);
+        return abi.encode(
+            CLIENT_AGENT_ID, PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID,
+            _providerPolicies(), _evaluatorPolicies()
+        );
     }
 
     function _optParamsOpenJob() internal pure returns (bytes memory) {
-        return abi.encode(CLIENT_AGENT_ID, uint256(0), EVALUATOR_AGENT_ID);
+        return abi.encode(
+            CLIENT_AGENT_ID, uint256(0), EVALUATOR_AGENT_ID,
+            _providerPolicies(), _evaluatorPolicies()
+        );
     }
 
     function _createJob() internal returns (uint256) {
@@ -119,27 +132,28 @@ contract SigilGateHookTest is Test {
     }
 
     // ──────────────────────────────────────────────
-    // createJob — afterAction gating
+    // createJob — afterAction gating (single policy)
     // ──────────────────────────────────────────────
 
     function test_afterCreateJob_directAssignment_passes() public {
         uint256 id = _createJob();
         assertGt(id, 0);
 
-        (uint256 cId, uint256 pId, uint256 eId) = hook.jobAgentIds(id);
-        assertEq(cId, CLIENT_AGENT_ID);
-        assertEq(pId, PROVIDER_AGENT_ID);
-        assertEq(eId, EVALUATOR_AGENT_ID);
+        SigilGateHook.JobData memory jd = hook.getJobData(id);
+        assertEq(jd.clientAgentId, CLIENT_AGENT_ID);
+        assertEq(jd.providerAgentId, PROVIDER_AGENT_ID);
+        assertEq(jd.evaluatorAgentId, EVALUATOR_AGENT_ID);
+        assertEq(jd.providerPolicies.length, 1);
+        assertEq(jd.evaluatorPolicies.length, 1);
     }
 
     function test_afterCreateJob_openJob_passes() public {
         uint256 id = _createOpenJob();
         assertGt(id, 0);
 
-        (uint256 cId, uint256 pId, uint256 eId) = hook.jobAgentIds(id);
-        assertEq(cId, CLIENT_AGENT_ID);
-        assertEq(pId, 0); // no provider yet
-        assertEq(eId, EVALUATOR_AGENT_ID);
+        SigilGateHook.JobData memory jd = hook.getJobData(id);
+        assertEq(jd.providerAgentId, 0);
+        assertEq(jd.providerPolicies.length, 1); // stored for later setProvider
     }
 
     function test_afterCreateJob_revert_evaluatorNotCompliant() public {
@@ -159,7 +173,7 @@ contract SigilGateHookTest is Test {
     }
 
     function test_afterCreateJob_revert_evaluatorAgentIdMismatch() public {
-        identity.setOwner(EVALUATOR_AGENT_ID, attacker); // wrong owner
+        identity.setOwner(EVALUATOR_AGENT_ID, attacker);
 
         vm.prank(client);
         vm.expectRevert(abi.encodeWithSelector(SigilGateHook.AgentIdMismatch.selector, EVALUATOR_AGENT_ID, evaluator, attacker));
@@ -167,11 +181,104 @@ contract SigilGateHookTest is Test {
     }
 
     function test_afterCreateJob_revert_clientAgentIdMismatch() public {
-        identity.setOwner(CLIENT_AGENT_ID, attacker); // wrong owner
+        identity.setOwner(CLIENT_AGENT_ID, attacker);
 
         vm.prank(client);
         vm.expectRevert(abi.encodeWithSelector(SigilGateHook.AgentIdMismatch.selector, CLIENT_AGENT_ID, client, attacker));
         escrow.createJob(provider, evaluator, block.timestamp + 1 days, DESC, address(hook), _optParams());
+    }
+
+    // ──────────────────────────────────────────────
+    // createJob — multiple policies
+    // ──────────────────────────────────────────────
+
+    function test_afterCreateJob_multiplePolicies_allPass() public {
+        // Provider needs 3 policies
+        sigil.setCompliance(provider, PROVIDER_POLICY, true);
+        sigil.setCompliance(provider, PROVIDER_POLICY_2, true);
+        sigil.setCompliance(provider, PROVIDER_POLICY_3, true);
+
+        bytes32[] memory pp = new bytes32[](3);
+        pp[0] = PROVIDER_POLICY;
+        pp[1] = PROVIDER_POLICY_2;
+        pp[2] = PROVIDER_POLICY_3;
+
+        bytes memory optParams = abi.encode(
+            CLIENT_AGENT_ID, PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID,
+            pp, _evaluatorPolicies()
+        );
+
+        vm.prank(client);
+        uint256 id = escrow.createJob(provider, evaluator, block.timestamp + 1 days, DESC, address(hook), optParams);
+
+        SigilGateHook.JobData memory jd = hook.getJobData(id);
+        assertEq(jd.providerPolicies.length, 3);
+    }
+
+    function test_afterCreateJob_multiplePolicies_oneFails() public {
+        sigil.setCompliance(provider, PROVIDER_POLICY, true);
+        sigil.setCompliance(provider, PROVIDER_POLICY_2, true);
+        sigil.setCompliance(provider, PROVIDER_POLICY_3, false); // fails
+
+        bytes32[] memory pp = new bytes32[](3);
+        pp[0] = PROVIDER_POLICY;
+        pp[1] = PROVIDER_POLICY_2;
+        pp[2] = PROVIDER_POLICY_3;
+
+        bytes memory optParams = abi.encode(
+            CLIENT_AGENT_ID, PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID,
+            pp, _evaluatorPolicies()
+        );
+
+        vm.prank(client);
+        vm.expectRevert(abi.encodeWithSelector(SigilGateHook.NotCompliant.selector, provider, PROVIDER_POLICY_3));
+        escrow.createJob(provider, evaluator, block.timestamp + 1 days, DESC, address(hook), optParams);
+    }
+
+    function test_afterCreateJob_multipleEvaluatorPolicies() public {
+        sigil.setCompliance(evaluator, EVALUATOR_POLICY, true);
+        sigil.setCompliance(evaluator, EVALUATOR_POLICY_2, true);
+
+        bytes32[] memory ep = new bytes32[](2);
+        ep[0] = EVALUATOR_POLICY;
+        ep[1] = EVALUATOR_POLICY_2;
+
+        bytes memory optParams = abi.encode(
+            CLIENT_AGENT_ID, PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID,
+            _providerPolicies(), ep
+        );
+
+        vm.prank(client);
+        uint256 id = escrow.createJob(provider, evaluator, block.timestamp + 1 days, DESC, address(hook), optParams);
+
+        SigilGateHook.JobData memory jd = hook.getJobData(id);
+        assertEq(jd.evaluatorPolicies.length, 2);
+    }
+
+    function test_afterCreateJob_revert_emptyEvaluatorPolicies() public {
+        bytes32[] memory emptyPolicies = new bytes32[](0);
+
+        bytes memory optParams = abi.encode(
+            CLIENT_AGENT_ID, PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID,
+            _providerPolicies(), emptyPolicies
+        );
+
+        vm.prank(client);
+        vm.expectRevert(SigilGateHook.EmptyPolicies.selector);
+        escrow.createJob(provider, evaluator, block.timestamp + 1 days, DESC, address(hook), optParams);
+    }
+
+    function test_afterCreateJob_revert_emptyProviderPolicies_directAssignment() public {
+        bytes32[] memory emptyPolicies = new bytes32[](0);
+
+        bytes memory optParams = abi.encode(
+            CLIENT_AGENT_ID, PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID,
+            emptyPolicies, _evaluatorPolicies()
+        );
+
+        vm.prank(client);
+        vm.expectRevert(SigilGateHook.EmptyPolicies.selector);
+        escrow.createJob(provider, evaluator, block.timestamp + 1 days, DESC, address(hook), optParams);
     }
 
     // ──────────────────────────────────────────────
@@ -185,8 +292,34 @@ contract SigilGateHookTest is Test {
         vm.prank(client);
         escrow.setProvider(id, provider, optParams);
 
-        (, uint256 pId,) = hook.jobAgentIds(id);
-        assertEq(pId, PROVIDER_AGENT_ID);
+        SigilGateHook.JobData memory jd = hook.getJobData(id);
+        assertEq(jd.providerAgentId, PROVIDER_AGENT_ID);
+    }
+
+    function test_beforeSetProvider_checksStoredPolicies() public {
+        // Create open job with 2 provider policies
+        sigil.setCompliance(provider, PROVIDER_POLICY, true);
+        sigil.setCompliance(provider, PROVIDER_POLICY_2, true);
+
+        bytes32[] memory pp = new bytes32[](2);
+        pp[0] = PROVIDER_POLICY;
+        pp[1] = PROVIDER_POLICY_2;
+
+        bytes memory createOptParams = abi.encode(
+            CLIENT_AGENT_ID, uint256(0), EVALUATOR_AGENT_ID,
+            pp, _evaluatorPolicies()
+        );
+
+        vm.prank(client);
+        uint256 id = escrow.createJob(address(0), evaluator, block.timestamp + 1 days, DESC, address(hook), createOptParams);
+
+        // setProvider — hook reads stored policies, checks both
+        bytes memory setProvOptParams = abi.encode(PROVIDER_AGENT_ID);
+        vm.prank(client);
+        escrow.setProvider(id, provider, setProvOptParams);
+
+        SigilGateHook.JobData memory jd = hook.getJobData(id);
+        assertEq(jd.providerAgentId, PROVIDER_AGENT_ID);
     }
 
     function test_beforeSetProvider_revert_notCompliant() public {
@@ -210,67 +343,26 @@ contract SigilGateHookTest is Test {
     }
 
     // ──────────────────────────────────────────────
-    // complete — afterAction reputation
+    // complete/reject — no reputation (gating only)
     // ──────────────────────────────────────────────
 
-    function test_afterComplete_writesFeedback() public {
+    function test_complete_noReputationWritten() public {
         uint256 id = _setupSubmitted();
 
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        assertEq(reputation.getFeedbackCount(), 2);
-
-        (uint256 agentId0, int128 val0) = reputation.getFeedback(0);
-        assertEq(agentId0, PROVIDER_AGENT_ID);
-        assertEq(val0, int128(1));
-
-        (uint256 agentId1, int128 val1) = reputation.getFeedback(1);
-        assertEq(agentId1, EVALUATOR_AGENT_ID);
-        assertEq(val1, int128(1));
-    }
-
-    function test_afterComplete_reputationFailure_doesNotRevert() public {
-        uint256 id = _setupSubmitted();
-        reputation.setShouldRevert(true);
-
-        vm.prank(evaluator);
-        escrow.complete(id, REASON, "");
-
-        // Complete still succeeds, provider still gets paid
+        // Job completed, provider got paid — hook did nothing extra
         assertEq(usdt.balanceOf(provider), 950e6);
-        assertEq(reputation.getFeedbackCount(), 0); // no feedback written
     }
 
-    // ──────────────────────────────────────────────
-    // reject — afterAction reputation
-    // ──────────────────────────────────────────────
-
-    function test_afterReject_writesFeedback() public {
+    function test_reject_noReputationWritten() public {
         uint256 id = _setupSubmitted();
 
         vm.prank(evaluator);
         escrow.reject(id, REASON, "");
 
-        assertEq(reputation.getFeedbackCount(), 2);
-
-        (uint256 agentId0, int128 val0) = reputation.getFeedback(0);
-        assertEq(agentId0, PROVIDER_AGENT_ID);
-        assertEq(val0, int128(-1)); // negative for provider
-
-        (uint256 agentId1, int128 val1) = reputation.getFeedback(1);
-        assertEq(agentId1, EVALUATOR_AGENT_ID);
-        assertEq(val1, int128(1)); // positive for evaluator
-    }
-
-    function test_afterReject_reputationFailure_doesNotRevert() public {
-        uint256 id = _setupSubmitted();
-        reputation.setShouldRevert(true);
-
-        vm.prank(evaluator);
-        escrow.reject(id, REASON, "");
-
-        // Reject still succeeds, client gets refund
+        // Job rejected, client got refund — hook did nothing extra
         assertEq(usdt.balanceOf(address(escrow)), 0);
     }
 
@@ -295,7 +387,6 @@ contract SigilGateHookTest is Test {
     // ──────────────────────────────────────────────
 
     function test_integration_fullLifecycle() public {
-        // Create -> setBudget -> fund -> submit -> complete
         uint256 id = _createJob();
 
         vm.prank(provider);
@@ -310,14 +401,11 @@ contract SigilGateHookTest is Test {
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        // Verify everything
         assertEq(usdt.balanceOf(provider), 950e6);
         assertEq(usdt.balanceOf(treasury), 50e6);
-        assertEq(reputation.getFeedbackCount(), 2);
     }
 
     function test_integration_bidFirst_fullLifecycle() public {
-        // Create open -> setProvider -> setBudget -> fund -> submit -> complete
         uint256 id = _createOpenJob();
 
         bytes memory setProvOptParams = abi.encode(PROVIDER_AGENT_ID);
@@ -337,6 +425,5 @@ contract SigilGateHookTest is Test {
         escrow.complete(id, REASON, "");
 
         assertEq(usdt.balanceOf(provider), 950e6);
-        assertEq(reputation.getFeedbackCount(), 2);
     }
 }

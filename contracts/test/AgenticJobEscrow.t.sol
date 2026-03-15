@@ -163,6 +163,12 @@ contract AgenticJobEscrowTest is Test {
         escrow.createJob(provider, address(0), block.timestamp + 1 days, DESC, address(0), "");
     }
 
+    function test_createJob_revert_evaluatorIsClient() public {
+        vm.prank(client);
+        vm.expectRevert(AgenticJobEscrow.InvalidEvaluator.selector);
+        escrow.createJob(provider, client, block.timestamp + 1 days, DESC, address(0), "");
+    }
+
     function test_createJob_revert_expiredInPast() public {
         vm.prank(client);
         vm.expectRevert(AgenticJobEscrow.InvalidExpiry.selector);
@@ -455,6 +461,14 @@ contract AgenticJobEscrowTest is Test {
         escrow.complete(id, REASON, "");
     }
 
+    function test_complete_revert_jobExpired() public {
+        uint256 id = _setupSubmitted();
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(evaluator);
+        vm.expectRevert(AgenticJobEscrow.JobExpired.selector);
+        escrow.complete(id, REASON, "");
+    }
+
     // ──────────────────────────────────────────────
     // reject
     // ──────────────────────────────────────────────
@@ -522,6 +536,14 @@ contract AgenticJobEscrowTest is Test {
 
         vm.prank(evaluator);
         vm.expectRevert(AgenticJobEscrow.InvalidStatus.selector);
+        escrow.reject(id, REASON, "");
+    }
+
+    function test_reject_revert_jobExpired() public {
+        uint256 id = _setupSubmitted();
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(evaluator);
+        vm.expectRevert(AgenticJobEscrow.JobExpired.selector);
         escrow.reject(id, REASON, "");
     }
 

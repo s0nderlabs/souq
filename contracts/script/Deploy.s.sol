@@ -12,9 +12,6 @@ contract Deploy is Script {
         uint256 feeBP = vm.envOr("PLATFORM_FEE_BP", uint256(500));
         address sigil = vm.envAddress("SIGIL_ADDRESS");
         address identityRegistry = vm.envAddress("IDENTITY_REGISTRY");
-        address reputationRegistry = vm.envAddress("REPUTATION_REGISTRY");
-        bytes32 providerPolicyId = vm.envBytes32("PROVIDER_POLICY_ID");
-        bytes32 evaluatorPolicyId = vm.envBytes32("EVALUATOR_POLICY_ID");
 
         vm.startBroadcast();
 
@@ -26,10 +23,7 @@ contract Deploy is Script {
         SigilGateHook hook = new SigilGateHook(
             address(escrow),
             sigil,
-            identityRegistry,
-            reputationRegistry,
-            providerPolicyId,
-            evaluatorPolicyId
+            identityRegistry
         );
         console.log("SigilGateHook:", address(hook));
 

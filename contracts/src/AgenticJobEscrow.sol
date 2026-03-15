@@ -53,8 +53,10 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
     error ProviderAlreadySet();
     error BudgetMismatch(uint256 expected, uint256 actual);
     error NotExpired();
+    error JobExpired();
     error ZeroBudget();
     error ZeroAddress();
+    error FeeOnTransferNotSupported();
     error FeeTooHigh();
 
     // ──────────────────────────────────────────────
@@ -122,6 +124,7 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
         bytes calldata optParams
     ) external nonReentrant returns (uint256 jobId) {
         if (evaluator_ == address(0)) revert InvalidEvaluator();
+        if (evaluator_ == msg.sender) revert InvalidEvaluator();
         if (expiredAt_ <= block.timestamp) revert InvalidExpiry();
 
         if (hook_ != address(0)) {
@@ -224,7 +227,9 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
 
         job.status = JobStatus.Funded;
         uint256 budget = job.budget;
+        uint256 balBefore = token.balanceOf(address(this));
         token.safeTransferFrom(msg.sender, address(this), budget);
+        if (token.balanceOf(address(this)) - balBefore != budget) revert FeeOnTransferNotSupported();
 
         emit JobFunded(jobId, budget);
 
@@ -263,6 +268,7 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
         Job storage job = _getJob(jobId);
         if (job.status != JobStatus.Submitted) revert InvalidStatus();
         if (msg.sender != job.evaluator) revert NotEvaluator();
+        if (block.timestamp >= job.expiredAt) revert JobExpired();
 
         address hook = job.hook;
         bytes memory hookData = abi.encode(msg.sender, reason_, optParams);
@@ -299,6 +305,7 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
             if (msg.sender != job.client) revert NotClient();
         } else if (job.status == JobStatus.Funded || job.status == JobStatus.Submitted) {
             if (msg.sender != job.evaluator) revert NotEvaluator();
+            if (block.timestamp >= job.expiredAt) revert JobExpired();
         } else {
             revert InvalidStatus();
         }

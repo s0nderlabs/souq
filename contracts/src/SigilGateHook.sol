@@ -5,18 +5,21 @@ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IACPHook} from "./interfaces/IACPHook.sol";
 import {ISigil} from "./interfaces/ISigil.sol";
 import {IIdentityRegistry} from "./interfaces/IIdentityRegistry.sol";
-import {IReputationRegistry} from "./interfaces/IReputationRegistry.sol";
 import {AgenticJobEscrow} from "./AgenticJobEscrow.sol";
 
+/// @title SigilGateHook — Gating-only hook for Souq Protocol
+/// @notice Checks Sigil compliance for providers and evaluators. No reputation writing.
 contract SigilGateHook is IACPHook {
     // ──────────────────────────────────────────────
     // Types
     // ──────────────────────────────────────────────
 
-    struct JobAgentIds {
+    struct JobData {
         uint256 clientAgentId;
         uint256 providerAgentId;
         uint256 evaluatorAgentId;
+        bytes32[] providerPolicies;
+        bytes32[] evaluatorPolicies;
     }
 
     // ──────────────────────────────────────────────
@@ -27,14 +30,14 @@ contract SigilGateHook is IACPHook {
     error NotCompliant(address wallet, bytes32 policyId);
     error AgentIdMismatch(uint256 agentId, address expected, address actual);
     error ZeroAddress();
+    error EmptyPolicies();
 
     // ──────────────────────────────────────────────
     // Events
     // ──────────────────────────────────────────────
 
     event ComplianceVerified(uint256 indexed jobId, address indexed wallet, bytes32 policyId);
-    event AgentIdsStored(uint256 indexed jobId, uint256 clientAgentId, uint256 providerAgentId, uint256 evaluatorAgentId);
-    event ReputationWritten(uint256 indexed jobId, uint256 indexed agentId, int128 value);
+    event JobDataStored(uint256 indexed jobId, uint256 clientAgentId, uint256 providerAgentId, uint256 evaluatorAgentId);
 
     // ──────────────────────────────────────────────
     // Immutables
@@ -43,28 +46,19 @@ contract SigilGateHook is IACPHook {
     address public immutable escrow;
     ISigil public immutable sigil;
     IIdentityRegistry public immutable identityRegistry;
-    IReputationRegistry public immutable reputationRegistry;
-    bytes32 public immutable providerPolicyId;
-    bytes32 public immutable evaluatorPolicyId;
 
     // ──────────────────────────────────────────────
     // State
     // ──────────────────────────────────────────────
 
-    mapping(uint256 => JobAgentIds) public jobAgentIds;
+    mapping(uint256 => JobData) internal _jobData;
 
     // ──────────────────────────────────────────────
-    // Selectors (precomputed for matching)
+    // Selectors
     // ──────────────────────────────────────────────
-
-    string private constant TAG_PROTOCOL = "souq";
-    string private constant TAG_COMPLETED = "completed";
-    string private constant TAG_REJECTED = "rejected";
 
     bytes4 private constant SEL_CREATE_JOB = AgenticJobEscrow.createJob.selector;
     bytes4 private constant SEL_SET_PROVIDER = AgenticJobEscrow.setProvider.selector;
-    bytes4 private constant SEL_COMPLETE = AgenticJobEscrow.complete.selector;
-    bytes4 private constant SEL_REJECT = AgenticJobEscrow.reject.selector;
 
     // ──────────────────────────────────────────────
     // Constructor
@@ -73,21 +67,14 @@ contract SigilGateHook is IACPHook {
     constructor(
         address escrow_,
         address sigil_,
-        address identityRegistry_,
-        address reputationRegistry_,
-        bytes32 providerPolicyId_,
-        bytes32 evaluatorPolicyId_
+        address identityRegistry_
     ) {
         if (escrow_ == address(0)) revert ZeroAddress();
         if (sigil_ == address(0)) revert ZeroAddress();
         if (identityRegistry_ == address(0)) revert ZeroAddress();
-        if (reputationRegistry_ == address(0)) revert ZeroAddress();
         escrow = escrow_;
         sigil = ISigil(sigil_);
         identityRegistry = IIdentityRegistry(identityRegistry_);
-        reputationRegistry = IReputationRegistry(reputationRegistry_);
-        providerPolicyId = providerPolicyId_;
-        evaluatorPolicyId = evaluatorPolicyId_;
     }
 
     // ──────────────────────────────────────────────
@@ -107,18 +94,13 @@ contract SigilGateHook is IACPHook {
         if (selector == SEL_SET_PROVIDER) {
             _beforeSetProvider(jobId, data);
         }
-        // Other selectors: pass through (no-op)
     }
 
     function afterAction(uint256 jobId, bytes4 selector, bytes calldata data) external onlyEscrow {
         if (selector == SEL_CREATE_JOB) {
             _afterCreateJob(jobId, data);
-        } else if (selector == SEL_COMPLETE) {
-            _afterComplete(jobId);
-        } else if (selector == SEL_REJECT) {
-            _afterReject(jobId);
         }
-        // Other selectors: pass through (no-op)
+        // complete/reject: no-op (reputation is voluntary via plugin)
     }
 
     // ──────────────────────────────────────────────
@@ -130,6 +112,14 @@ contract SigilGateHook is IACPHook {
     }
 
     // ──────────────────────────────────────────────
+    // View
+    // ──────────────────────────────────────────────
+
+    function getJobData(uint256 jobId) external view returns (JobData memory) {
+        return _jobData[jobId];
+    }
+
+    // ──────────────────────────────────────────────
     // Internal — Gating
     // ──────────────────────────────────────────────
 
@@ -138,36 +128,41 @@ contract SigilGateHook is IACPHook {
         (address client, address provider, address evaluator, bytes memory optParams) =
             abi.decode(data, (address, address, address, bytes));
 
-        // Decode agentIds from optParams
-        (uint256 clientAgentId, uint256 providerAgentId, uint256 evaluatorAgentId) =
-            abi.decode(optParams, (uint256, uint256, uint256));
+        // Decode from optParams
+        (
+            uint256 clientAgentId,
+            uint256 providerAgentId,
+            uint256 evaluatorAgentId,
+            bytes32[] memory providerPolicies,
+            bytes32[] memory evaluatorPolicies
+        ) = abi.decode(optParams, (uint256, uint256, uint256, bytes32[], bytes32[]));
+
+        // Evaluator policies must not be empty
+        if (evaluatorPolicies.length == 0) revert EmptyPolicies();
 
         // Verify client agentId
         _verifyAgentId(clientAgentId, client);
 
-        // Verify evaluator agentId + compliance
+        // Verify evaluator agentId + all policies
         _verifyAgentId(evaluatorAgentId, evaluator);
-        if (!sigil.isCompliant(evaluator, evaluatorPolicyId)) {
-            revert NotCompliant(evaluator, evaluatorPolicyId);
-        }
-        emit ComplianceVerified(jobId, evaluator, evaluatorPolicyId);
+        _checkCompliance(jobId, evaluator, evaluatorPolicies);
 
         // Verify provider if set (direct assignment)
         if (provider != address(0)) {
+            if (providerPolicies.length == 0) revert EmptyPolicies();
             _verifyAgentId(providerAgentId, provider);
-            if (!sigil.isCompliant(provider, providerPolicyId)) {
-                revert NotCompliant(provider, providerPolicyId);
-            }
-            emit ComplianceVerified(jobId, provider, providerPolicyId);
+            _checkCompliance(jobId, provider, providerPolicies);
         }
 
-        // Store agentIds
-        jobAgentIds[jobId] = JobAgentIds({
-            clientAgentId: clientAgentId,
-            providerAgentId: providerAgentId,
-            evaluatorAgentId: evaluatorAgentId
-        });
-        emit AgentIdsStored(jobId, clientAgentId, providerAgentId, evaluatorAgentId);
+        // Store per-job data
+        JobData storage jd = _jobData[jobId];
+        jd.clientAgentId = clientAgentId;
+        jd.providerAgentId = providerAgentId;
+        jd.evaluatorAgentId = evaluatorAgentId;
+        jd.providerPolicies = providerPolicies;
+        jd.evaluatorPolicies = evaluatorPolicies;
+
+        emit JobDataStored(jobId, clientAgentId, providerAgentId, evaluatorAgentId);
     }
 
     function _beforeSetProvider(uint256 jobId, bytes calldata data) internal {
@@ -177,58 +172,31 @@ contract SigilGateHook is IACPHook {
         // Decode providerAgentId from optParams
         uint256 providerAgentId = abi.decode(optParams, (uint256));
 
-        // Verify agentId + compliance
+        // Verify agentId
         _verifyAgentId(providerAgentId, provider);
-        if (!sigil.isCompliant(provider, providerPolicyId)) {
-            revert NotCompliant(provider, providerPolicyId);
-        }
-        emit ComplianceVerified(jobId, provider, providerPolicyId);
+
+        // Read stored provider policies from createJob
+        bytes32[] storage policies = _jobData[jobId].providerPolicies;
+        if (policies.length == 0) revert EmptyPolicies();
+        _checkCompliance(jobId, provider, policies);
 
         // Update stored providerAgentId
-        jobAgentIds[jobId].providerAgentId = providerAgentId;
-    }
-
-    // ──────────────────────────────────────────────
-    // Internal — Reputation
-    // ──────────────────────────────────────────────
-
-    function _afterComplete(uint256 jobId) internal {
-        JobAgentIds storage ids = jobAgentIds[jobId];
-        _writeFeedback(jobId, ids.providerAgentId, int128(1));
-        _writeFeedback(jobId, ids.evaluatorAgentId, int128(1));
-    }
-
-    function _afterReject(uint256 jobId) internal {
-        JobAgentIds storage ids = jobAgentIds[jobId];
-        if (ids.providerAgentId != 0) {
-            _writeFeedback(jobId, ids.providerAgentId, int128(-1));
-        }
-        if (ids.evaluatorAgentId != 0) {
-            _writeFeedback(jobId, ids.evaluatorAgentId, int128(1));
-        }
-    }
-
-    function _writeFeedback(uint256 jobId, uint256 agentId, int128 value) internal {
-        // Best-effort: reputation write failure must NOT block settlement
-        try reputationRegistry.giveFeedback(
-            agentId,
-            value,
-            0,
-            TAG_PROTOCOL,
-            value > 0 ? TAG_COMPLETED : TAG_REJECTED,
-            "",
-            "",
-            bytes32(jobId)
-        ) {
-            emit ReputationWritten(jobId, agentId, value);
-        } catch {
-            // Silently fail — escrow settlement is priority
-        }
+        _jobData[jobId].providerAgentId = providerAgentId;
     }
 
     // ──────────────────────────────────────────────
     // Internal — Helpers
     // ──────────────────────────────────────────────
+
+    function _checkCompliance(uint256 jobId, address wallet, bytes32[] memory policies) internal {
+        for (uint256 i; i < policies.length;) {
+            if (!sigil.isCompliant(wallet, policies[i])) {
+                revert NotCompliant(wallet, policies[i]);
+            }
+            emit ComplianceVerified(jobId, wallet, policies[i]);
+            unchecked { ++i; }
+        }
+    }
 
     function _verifyAgentId(uint256 agentId, address expectedOwner) internal view {
         address actual = identityRegistry.ownerOf(agentId);
