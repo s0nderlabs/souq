@@ -47,6 +47,7 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
     error InvalidStatus();
     error NotClient();
     error NotProvider();
+    error NotClientOrProvider();
     error NotEvaluator();
     error ProviderNotSet();
     error ProviderAlreadySet();
@@ -185,7 +186,7 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
     ) external nonReentrant {
         Job storage job = _getJob(jobId);
         if (job.status != JobStatus.Open) revert InvalidStatus();
-        if (msg.sender != job.provider) revert NotProvider();
+        if (msg.sender != job.client && msg.sender != job.provider) revert NotClientOrProvider();
         if (amount_ == 0) revert ZeroBudget();
 
         address hook = job.hook;

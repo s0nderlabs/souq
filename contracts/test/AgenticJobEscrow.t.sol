@@ -262,10 +262,32 @@ contract AgenticJobEscrowTest is Test {
         assertEq(job.budget, 800e6);
     }
 
-    function test_setBudget_revert_notProvider() public {
+    function test_setBudget_byClient_success() public {
         uint256 id = _createJob();
         vm.prank(client);
-        vm.expectRevert(AgenticJobEscrow.NotProvider.selector);
+        escrow.setBudget(id, BUDGET, "");
+
+        AgenticJobEscrow.Job memory job = escrow.getJob(id);
+        assertEq(job.budget, BUDGET);
+    }
+
+    function test_setBudget_byClient_thenProviderUpdates() public {
+        uint256 id = _createJob();
+        // Client sets initial budget
+        vm.prank(client);
+        escrow.setBudget(id, 500e6, "");
+        // Provider negotiates higher
+        vm.prank(provider);
+        escrow.setBudget(id, 800e6, "");
+
+        AgenticJobEscrow.Job memory job = escrow.getJob(id);
+        assertEq(job.budget, 800e6);
+    }
+
+    function test_setBudget_revert_notClientOrProvider() public {
+        uint256 id = _createJob();
+        vm.prank(attacker);
+        vm.expectRevert(AgenticJobEscrow.NotClientOrProvider.selector);
         escrow.setBudget(id, BUDGET, "");
     }
 
@@ -657,6 +679,24 @@ contract AgenticJobEscrowTest is Test {
         escrow.complete(id, REASON, "");
 
         assertEq(usdt.balanceOf(provider), 950e6);
+    }
+
+    function test_e2e_serviceListing() public {
+        // Type 1b: Client creates job with known provider → CLIENT sets budget → funds → provider works → complete
+        uint256 id = _createJob();
+
+        // Client sets the budget (service listing price)
+        vm.prank(client);
+        escrow.setBudget(id, BUDGET, "");
+
+        _fund(id);
+        _submit(id);
+
+        vm.prank(evaluator);
+        escrow.complete(id, REASON, "");
+
+        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(treasury), 50e6);
     }
 
     function test_e2e_rejection_refund() public {
