@@ -41,7 +41,7 @@ contract SigilGateHookTest is Test {
         sigil = new MockSigil();
         identity = new MockIdentityRegistry();
 
-        escrow = new AgenticJobEscrow(address(usdt), treasury, 500, owner);
+        escrow = new AgenticJobEscrow(address(usdt), treasury, 500, 500, owner);
 
         hook = new SigilGateHook(
             address(escrow),
@@ -353,7 +353,7 @@ contract SigilGateHookTest is Test {
         escrow.complete(id, REASON, "");
 
         // Job completed, provider got paid — hook did nothing extra
-        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(provider), 900e6);
     }
 
     function test_reject_noReputationWritten() public {
@@ -401,7 +401,7 @@ contract SigilGateHookTest is Test {
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(provider), 900e6);
         assertEq(usdt.balanceOf(treasury), 50e6);
     }
 
@@ -424,6 +424,6 @@ contract SigilGateHookTest is Test {
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(provider), 900e6);
     }
 }

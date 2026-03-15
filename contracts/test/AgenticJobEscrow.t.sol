@@ -19,7 +19,8 @@ contract AgenticJobEscrowTest is Test {
     address attacker = address(0xBA);
 
     uint256 constant BUDGET = 1000e6; // 1000 USDT
-    uint256 constant FEE_BP = 500; // 5%
+    uint256 constant FEE_BP = 500; // 5% platform
+    uint256 constant EVAL_FEE_BP = 500; // 5% evaluator
     bytes32 constant DESC = keccak256("research report");
     bytes32 constant DELIVERABLE = keccak256("ipfs://QmDeliverable");
     bytes32 constant REASON = keccak256("good work");
@@ -27,7 +28,7 @@ contract AgenticJobEscrowTest is Test {
     function setUp() public {
         usdt = new MockERC20("USDT", "USDT", 6);
         hook = new MockHook();
-        escrow = new AgenticJobEscrow(address(usdt), treasury, FEE_BP, owner);
+        escrow = new AgenticJobEscrow(address(usdt), treasury, FEE_BP, EVAL_FEE_BP, owner);
 
         usdt.mint(client, 100_000e6);
         vm.prank(client);
@@ -105,17 +106,22 @@ contract AgenticJobEscrowTest is Test {
 
     function test_constructor_revert_zeroToken() public {
         vm.expectRevert(AgenticJobEscrow.ZeroAddress.selector);
-        new AgenticJobEscrow(address(0), treasury, FEE_BP, owner);
+        new AgenticJobEscrow(address(0), treasury, FEE_BP, EVAL_FEE_BP, owner);
     }
 
     function test_constructor_revert_zeroTreasury() public {
         vm.expectRevert(AgenticJobEscrow.ZeroAddress.selector);
-        new AgenticJobEscrow(address(usdt), address(0), FEE_BP, owner);
+        new AgenticJobEscrow(address(usdt), address(0), FEE_BP, EVAL_FEE_BP, owner);
     }
 
     function test_constructor_revert_feeTooHigh() public {
         vm.expectRevert(AgenticJobEscrow.FeeTooHigh.selector);
-        new AgenticJobEscrow(address(usdt), treasury, 10001, owner);
+        new AgenticJobEscrow(address(usdt), treasury, 10001, 0, owner);
+    }
+
+    function test_constructor_revert_combinedFeeTooHigh() public {
+        vm.expectRevert(AgenticJobEscrow.FeeTooHigh.selector);
+        new AgenticJobEscrow(address(usdt), treasury, 5001, 5000, owner);
     }
 
     // ──────────────────────────────────────────────
@@ -419,30 +425,43 @@ contract AgenticJobEscrowTest is Test {
         AgenticJobEscrow.Job memory job = escrow.getJob(id);
         assertEq(uint8(job.status), uint8(AgenticJobEscrow.JobStatus.Completed));
 
-        uint256 expectedFee = (BUDGET * FEE_BP) / 10000;
-        uint256 expectedPayout = BUDGET - expectedFee;
+        uint256 expectedPlatformFee = (BUDGET * FEE_BP) / 10000;
+        uint256 expectedEvalFee = (BUDGET * EVAL_FEE_BP) / 10000;
+        uint256 expectedPayout = BUDGET - expectedPlatformFee - expectedEvalFee;
 
         assertEq(usdt.balanceOf(provider) - providerBal, expectedPayout);
-        assertEq(usdt.balanceOf(treasury) - treasuryBal, expectedFee);
+        assertEq(usdt.balanceOf(treasury) - treasuryBal, expectedPlatformFee);
     }
 
-    function test_complete_feeCalculation_5percent() public {
+    function test_complete_feeCalculation_threeWaySplit() public {
         uint256 id = _setupSubmitted();
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        // 1000 USDT * 500bp = 50 USDT fee, 950 USDT payout
+        // 1000 USDT: 5% platform = 50, 5% evaluator = 50, provider = 900
         assertEq(usdt.balanceOf(treasury), 50e6);
-        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(evaluator), 50e6);
+        assertEq(usdt.balanceOf(provider), 900e6);
+    }
+
+    function test_complete_evaluatorGetsPaid() public {
+        uint256 id = _setupSubmitted();
+        uint256 evalBal = usdt.balanceOf(evaluator);
+
+        vm.prank(evaluator);
+        escrow.complete(id, REASON, "");
+
+        assertEq(usdt.balanceOf(evaluator) - evalBal, 50e6);
     }
 
     function test_complete_emitsEvent() public {
         uint256 id = _setupSubmitted();
-        uint256 expectedFee = (BUDGET * FEE_BP) / 10000;
-        uint256 expectedPayout = BUDGET - expectedFee;
+        uint256 expectedPlatformFee = (BUDGET * FEE_BP) / 10000;
+        uint256 expectedEvalFee = (BUDGET * EVAL_FEE_BP) / 10000;
+        uint256 expectedPayout = BUDGET - expectedPlatformFee - expectedEvalFee;
 
         vm.expectEmit(true, false, false, true);
-        emit AgenticJobEscrow.JobCompleted(id, expectedPayout, expectedFee);
+        emit AgenticJobEscrow.JobCompleted(id, expectedPayout, expectedEvalFee, expectedPlatformFee);
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
     }
@@ -631,7 +650,19 @@ contract AgenticJobEscrowTest is Test {
     function test_setPlatformFee_revert_tooHigh() public {
         vm.prank(owner);
         vm.expectRevert(AgenticJobEscrow.FeeTooHigh.selector);
-        escrow.setPlatformFee(10001);
+        escrow.setPlatformFee(10000); // 10000 + 500 (eval) > 10000
+    }
+
+    function test_setEvaluatorFee_success() public {
+        vm.prank(owner);
+        escrow.setEvaluatorFee(1000);
+        assertEq(escrow.evaluatorFeeBP(), 1000);
+    }
+
+    function test_setEvaluatorFee_revert_tooHigh() public {
+        vm.prank(owner);
+        vm.expectRevert(AgenticJobEscrow.FeeTooHigh.selector);
+        escrow.setEvaluatorFee(10000); // 500 (platform) + 10000 > 10000
     }
 
     // ──────────────────────────────────────────────
@@ -655,9 +686,10 @@ contract AgenticJobEscrowTest is Test {
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        uint256 fee = (budget * FEE_BP) / 10000;
-        uint256 payout = budget - fee;
-        assertEq(fee + payout, budget);
+        uint256 platformFee = (budget * FEE_BP) / 10000;
+        uint256 evalFee = (budget * EVAL_FEE_BP) / 10000;
+        uint256 payout = budget - platformFee - evalFee;
+        assertEq(platformFee + evalFee + payout, budget);
     }
 
     function test_fuzz_createJob_anyExpiry(uint256 expiry) public {
@@ -681,7 +713,7 @@ contract AgenticJobEscrowTest is Test {
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(provider), 900e6);
         assertEq(usdt.balanceOf(treasury), 50e6);
         assertEq(usdt.balanceOf(address(escrow)), 0);
     }
@@ -700,7 +732,7 @@ contract AgenticJobEscrowTest is Test {
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(provider), 900e6);
     }
 
     function test_e2e_serviceListing() public {
@@ -717,7 +749,7 @@ contract AgenticJobEscrowTest is Test {
         vm.prank(evaluator);
         escrow.complete(id, REASON, "");
 
-        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(provider), 900e6);
         assertEq(usdt.balanceOf(treasury), 50e6);
     }
 
@@ -752,7 +784,7 @@ contract AgenticJobEscrowTest is Test {
         escrow.reject(id2, REASON, "");
 
         // id1: provider got paid, id2: client got refund
-        assertEq(usdt.balanceOf(provider), 950e6);
+        assertEq(usdt.balanceOf(provider), 900e6);
         assertEq(usdt.balanceOf(treasury), 50e6);
         // escrow should be empty
         assertEq(usdt.balanceOf(address(escrow)), 0);

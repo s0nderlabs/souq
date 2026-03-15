@@ -10,13 +10,14 @@ contract Deploy is Script {
         address token = vm.envAddress("USDT_ADDRESS");
         address treasury = vm.envAddress("TREASURY_ADDRESS");
         uint256 feeBP = vm.envOr("PLATFORM_FEE_BP", uint256(500));
+        uint256 evalFeeBP = vm.envOr("EVALUATOR_FEE_BP", uint256(500));
         address sigil = vm.envAddress("SIGIL_ADDRESS");
         address identityRegistry = vm.envAddress("IDENTITY_REGISTRY");
 
         vm.startBroadcast();
 
         AgenticJobEscrow escrow = new AgenticJobEscrow(
-            token, treasury, feeBP, msg.sender
+            token, treasury, feeBP, evalFeeBP, msg.sender
         );
         console.log("AgenticJobEscrow:", address(escrow));
 

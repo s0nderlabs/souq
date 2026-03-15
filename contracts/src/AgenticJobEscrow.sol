@@ -75,11 +75,12 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
     event BudgetSet(uint256 indexed jobId, uint256 amount);
     event JobFunded(uint256 indexed jobId, uint256 amount);
     event WorkSubmitted(uint256 indexed jobId, bytes32 deliverable);
-    event JobCompleted(uint256 indexed jobId, uint256 providerPayout, uint256 platformFee);
+    event JobCompleted(uint256 indexed jobId, uint256 providerPayout, uint256 evaluatorPayout, uint256 platformFee);
     event JobRejected(uint256 indexed jobId, address indexed rejectedBy, bytes32 reason);
     event RefundClaimed(uint256 indexed jobId, uint256 amount);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
     event PlatformFeeUpdated(uint256 oldFeeBP, uint256 newFeeBP);
+    event EvaluatorFeeUpdated(uint256 oldFeeBP, uint256 newFeeBP);
 
     // ──────────────────────────────────────────────
     // State
@@ -90,6 +91,7 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
     IERC20 public immutable token;
     address public treasury;
     uint256 public platformFeeBP;
+    uint256 public evaluatorFeeBP;
     uint256 public jobCount;
     mapping(uint256 => Job) internal _jobs;
 
@@ -101,14 +103,16 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
         address token_,
         address treasury_,
         uint256 platformFeeBP_,
+        uint256 evaluatorFeeBP_,
         address owner_
     ) Ownable(owner_) {
         if (token_ == address(0)) revert ZeroAddress();
         if (treasury_ == address(0)) revert ZeroAddress();
-        if (platformFeeBP_ > BPS_DENOMINATOR) revert FeeTooHigh();
+        if (platformFeeBP_ + evaluatorFeeBP_ > BPS_DENOMINATOR) revert FeeTooHigh();
         token = IERC20(token_);
         treasury = treasury_;
         platformFeeBP = platformFeeBP_;
+        evaluatorFeeBP = evaluatorFeeBP_;
     }
 
     // ──────────────────────────────────────────────
@@ -281,15 +285,20 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
 
         uint256 budget = job.budget;
         address jobProvider = job.provider;
-        uint256 fee = (budget * platformFeeBP) / BPS_DENOMINATOR;
-        uint256 payout = budget - fee;
+        address jobEvaluator = job.evaluator;
+        uint256 platformFee = (budget * platformFeeBP) / BPS_DENOMINATOR;
+        uint256 evaluatorFee = (budget * evaluatorFeeBP) / BPS_DENOMINATOR;
+        uint256 providerPayout = budget - platformFee - evaluatorFee;
 
-        if (fee > 0) {
-            token.safeTransfer(treasury, fee);
+        if (platformFee > 0) {
+            token.safeTransfer(treasury, platformFee);
         }
-        token.safeTransfer(jobProvider, payout);
+        if (evaluatorFee > 0) {
+            token.safeTransfer(jobEvaluator, evaluatorFee);
+        }
+        token.safeTransfer(jobProvider, providerPayout);
 
-        emit JobCompleted(jobId, payout, fee);
+        emit JobCompleted(jobId, providerPayout, evaluatorFee, platformFee);
 
         _afterHook(jobId, hook, hookData);
     }
@@ -355,10 +364,17 @@ contract AgenticJobEscrow is Ownable, ReentrancyGuard {
     }
 
     function setPlatformFee(uint256 feeBP_) external onlyOwner {
-        if (feeBP_ > BPS_DENOMINATOR) revert FeeTooHigh();
+        if (feeBP_ + evaluatorFeeBP > BPS_DENOMINATOR) revert FeeTooHigh();
         uint256 old = platformFeeBP;
         platformFeeBP = feeBP_;
         emit PlatformFeeUpdated(old, feeBP_);
+    }
+
+    function setEvaluatorFee(uint256 feeBP_) external onlyOwner {
+        if (platformFeeBP + feeBP_ > BPS_DENOMINATOR) revert FeeTooHigh();
+        uint256 old = evaluatorFeeBP;
+        evaluatorFeeBP = feeBP_;
+        emit EvaluatorFeeUpdated(old, feeBP_);
     }
 
     // ──────────────────────────────────────────────
