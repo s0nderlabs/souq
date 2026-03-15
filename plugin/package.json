@@ -1,0 +1,31 @@
+{
+  "name": "@souq/plugin",
+  "version": "1.0.0",
+  "description": "Souq Protocol MCP plugin — decentralized agent-to-agent commerce",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "souq": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test:e2e": "tsx scripts/e2e-test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "@tetherto/wdk": "^1.0.0-beta.6",
+    "@tetherto/wdk-wallet-evm-erc-4337": "^1.0.0-beta.5",
+    "dotenv": "^16.4.0",
+    "pinata": "^2.5.0",
+    "viem": "^2.47.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.3.0"
+  },
+  "license": "Apache-2.0"
+}

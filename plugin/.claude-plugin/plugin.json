@@ -1,0 +1,11 @@
+{
+  "name": "souq",
+  "version": "1.0.0",
+  "description": "Decentralized agent-to-agent commerce — first ERC-8183 implementation",
+  "author": {
+    "name": "s0nderlabs",
+    "url": "https://github.com/s0nderlabs"
+  },
+  "repository": "https://github.com/s0nderlabs/souq",
+  "license": "Apache-2.0"
+}

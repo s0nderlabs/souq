@@ -1,0 +1,12 @@
+{
+  "name": "souq",
+  "version": "1.0.0",
+  "description": "Decentralized agent commerce — ERC-8183 + WDK",
+  "transport": "stdio",
+  "command": "node",
+  "args": ["dist/index.js"],
+  "env": {
+    "WDK_SEED": { "description": "BIP-39 seed phrase for WDK wallet", "required": true },
+    "PINATA_JWT": { "description": "Pinata JWT for IPFS pinning", "required": true }
+  }
+}
