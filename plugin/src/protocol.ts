@@ -10,13 +10,14 @@ import {
 } from "viem";
 import { sepolia } from "viem/chains";
 import {
-  getSeedPhrase,
+  getOrCreateSeedPhrase,
   getRpcUrl,
   USDT_ADDRESS,
   getWdkSepoliaConfig,
   WDK_WALLET_NAME,
 } from "./config.js";
 import { usdtAbi } from "./abi/usdt.js";
+import { resetX402Client } from "./x402-client.js";
 
 // ── Singleton State ──
 
@@ -31,10 +32,12 @@ let publicClientInstance: PublicClient | null = null;
 export async function initWdk(): Promise<void> {
   if (wdkInstance && wdkAccount) return;
 
-  const seed = getSeedPhrase();
-  const rpcUrl = getRpcUrl();
+  const seed = await getOrCreateSeedPhrase();
+  const wdkConfig = getWdkSepoliaConfig();
 
-  const config = { ...getWdkSepoliaConfig(), provider: rpcUrl };
+  // Use bundler URL as provider for WDK — ensures gas price matches Pimlico's requirements
+  // The separate publicClient (viem) uses getRpcUrl() for read-only calls
+  const config = { ...wdkConfig, provider: wdkConfig.bundlerUrl };
 
   wdkInstance = new WDK(seed);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,6 +128,7 @@ export function dispose(): void {
     wdkInstance = null;
     wdkAccount = null;
     wdkAddress = null;
+    resetX402Client();
     console.error("[souq] WDK disposed");
   }
 }

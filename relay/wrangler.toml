@@ -1,0 +1,24 @@
+name = "souq-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+CHAIN_ID = "11155111"
+USDT_ADDRESS = "0xABfd273ef83Ed85DBe776E4311118c3F2da27469"
+TREASURY_ADDRESS = "0x06B74fe8070C96D92e3a2A8A871849Ac81e4c09e"
+ESCROW_ADDRESS = "0x2AE839f237187102713c8c05736fda65430B17f0"
+
+[[kv_namespaces]]
+binding = "BOOTSTRAP_KV"
+id = "aac4a605d4264909892817be210f29ed"
+preview_id = "af3efe95f31f47ea9f3d9909333435ef"
+
+[durable_objects]
+bindings = [
+  { name = "RELAY", class_name = "SouqRelay" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SouqRelay"]

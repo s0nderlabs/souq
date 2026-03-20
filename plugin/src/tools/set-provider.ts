@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { encodeFunctionData, getAddress as viemGetAddress, type Address } from "viem";
+import { encodeFunctionData, encodeAbiParameters, getAddress as viemGetAddress, type Address, type Hex } from "viem";
 import { sendTx } from "../protocol.js";
 import { ESCROW_ADDRESS, explorerTxUrl } from "../config.js";
 import { escrowAbi } from "../abi/escrow.js";
@@ -8,6 +8,10 @@ import { escrowAbi } from "../abi/escrow.js";
 const Schema = z.object({
   jobId: z.number().describe("The job ID to assign a provider to"),
   provider: z.string().describe("The provider wallet address"),
+  providerAgentId: z
+    .number()
+    .default(0)
+    .describe("ERC-8004 agent ID of the provider. Required when job has a hook."),
 });
 
 interface SetProviderResult {
@@ -42,10 +46,15 @@ async function handler(params: z.infer<typeof Schema>): Promise<SetProviderResul
   try {
     const providerAddress = viemGetAddress(params.provider) as Address;
 
+    // Encode optParams for hook (providerAgentId > 0 indicates hook is active)
+    const optParams: Hex = params.providerAgentId > 0
+      ? encodeAbiParameters([{ type: "uint256" }], [BigInt(params.providerAgentId)])
+      : "0x";
+
     const data = encodeFunctionData({
       abi: escrowAbi,
       functionName: "setProvider",
-      args: [BigInt(params.jobId), providerAddress, "0x"],
+      args: [BigInt(params.jobId), providerAddress, optParams],
     });
 
     const { hash } = await sendTx(ESCROW_ADDRESS, data);

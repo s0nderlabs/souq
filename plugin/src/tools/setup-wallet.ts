@@ -5,7 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { formatUnits, type Address } from "viem";
 import { initWdk, getAddress, getPublicClient } from "../protocol.js";
-import { USDT_ADDRESS, USDT_DECIMALS, explorerAddressUrl, getSeedPhrase } from "../config.js";
+import { USDT_ADDRESS, USDT_DECIMALS, explorerAddressUrl, getSeedPhrase, getSouqApiUrl } from "../config.js";
 import { usdtAbi } from "../abi/usdt.js";
 import { deriveKeypairFromSeed } from "../encryption.js";
 import { bytesToHex } from "viem";
@@ -21,6 +21,10 @@ interface SetupWalletResult {
     usdtBalance: string;
     ethBalance: string;
     encryptionPublicKey: string;
+  };
+  faucet?: {
+    status: string;
+    amount?: string;
   };
   error?: string;
 }
@@ -55,17 +59,43 @@ async function setupWalletHandler(
     const address = await getAddress();
     const publicClient = getPublicClient();
 
-    // Read USDT balance
-    const usdtBalanceRaw = await publicClient.readContract({
-      address: USDT_ADDRESS,
-      abi: usdtAbi,
-      functionName: "balanceOf",
-      args: [address],
-    }) as bigint;
-    const usdtBalance = formatUnits(usdtBalanceRaw, USDT_DECIMALS);
+    // Request faucet tokens from backend
+    let faucetResult: { status: string; amount?: string } = { status: "skipped" };
+    try {
+      const apiUrl = getSouqApiUrl();
+      const faucetResponse = await fetch(`${apiUrl}/faucet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
 
-    // Read ETH balance
-    const ethBalanceRaw = await publicClient.getBalance({ address });
+      if (faucetResponse.ok) {
+        const faucetData = (await faucetResponse.json()) as { amount?: string };
+        faucetResult = { status: "funded", amount: faucetData.amount || "5 USDT" };
+        console.error(`[souq] Faucet: received ${faucetResult.amount}`);
+      } else if (faucetResponse.status === 409) {
+        faucetResult = { status: "already_claimed" };
+        console.error("[souq] Faucet: already claimed");
+      } else {
+        faucetResult = { status: `error (${faucetResponse.status})` };
+        console.error(`[souq] Faucet error: ${faucetResponse.status}`);
+      }
+    } catch (faucetError) {
+      faucetResult = { status: "unavailable" };
+      console.error(`[souq] Faucet unavailable: ${faucetError instanceof Error ? faucetError.message : String(faucetError)}`);
+    }
+
+    // Read balances in parallel
+    const [usdtBalanceRaw, ethBalanceRaw] = await Promise.all([
+      publicClient.readContract({
+        address: USDT_ADDRESS,
+        abi: usdtAbi,
+        functionName: "balanceOf",
+        args: [address],
+      }) as Promise<bigint>,
+      publicClient.getBalance({ address }),
+    ]);
+    const usdtBalance = formatUnits(usdtBalanceRaw, USDT_DECIMALS);
     const ethBalance = formatUnits(ethBalanceRaw, 18);
 
     // Derive encryption keypair
@@ -83,6 +113,7 @@ async function setupWalletHandler(
         ethBalance: `${ethBalance} ETH`,
         encryptionPublicKey,
       },
+      faucet: faucetResult,
     };
   } catch (error) {
     return {

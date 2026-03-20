@@ -1,12 +1,16 @@
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Address } from "viem";
 
 // ── Deployed Contract Addresses (Sepolia) ──
 
-export const ESCROW_ADDRESS = "0x28142241e04784a370C5549Fc89dCc359E0366F1" as Address;
-export const HOOK_ADDRESS = "0xb5DaF4Acd89b3222BB2d8D8EfD2C048588Db9A78" as Address;
-export const USDT_ADDRESS = "0xd077a400968890eacc75cdc901f0356c943e4fdb" as Address;
+export const ESCROW_ADDRESS = "0x2AE839f237187102713c8c05736fda65430B17f0" as Address;
+export const HOOK_ADDRESS = "0xA59fCfe0Ec8eC0C18A2a7924A7B3877C2E112303" as Address;
+export const USDT_ADDRESS = "0xABfd273ef83Ed85DBe776E4311118c3F2da27469" as Address; // USDT0Mock
 export const IDENTITY_REGISTRY = "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Address;
 export const REPUTATION_REGISTRY = "0x8004B663056A597Dffe9eCcC1965A193B7388713" as Address;
+export const TREASURY_ADDRESS = "0x06B74fe8070C96D92e3a2A8A871849Ac81e4c09e" as Address;
 
 // ── Chain Config ──
 
@@ -14,76 +18,109 @@ export const SEPOLIA_CHAIN_ID = 11155111;
 export const EXPLORER_BASE = "https://sepolia.etherscan.io";
 export const USDT_DECIMALS = 6;
 
-// ── WDK ERC-4337 Config (Pimlico Sponsored Paymaster) ──
+// ── Backend API ──
+
+export const SOUQ_API_URL = process.env.SOUQ_API_URL || "https://api.souq.s0nderlabs.xyz";
+
+export function getSouqApiUrl(): string {
+  return SOUQ_API_URL;
+}
+
+// ── WDK ERC-4337 Config (routes through backend) ──
 
 export const WDK_WALLET_NAME = "sepolia";
 
 export function getPimlicoUrl(): string {
   const apiKey = process.env.PIMLICO_API_KEY;
-  if (apiKey && apiKey.trim().length > 0) {
-    return `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey.trim()}`;
+  if (!apiKey || apiKey.trim().length === 0) {
+    throw new Error("PIMLICO_API_KEY environment variable is required");
   }
-  // Fallback to public endpoint (token paymaster, limited)
-  return "https://public.pimlico.io/v2/11155111/rpc";
+  return `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey.trim()}`;
 }
 
 export function getWdkSepoliaConfig() {
+  // WDK connects to Pimlico DIRECTLY (not through backend proxy)
+  // Reason: WDK's Safe4337Pack needs Pimlico to support eth_getCode, eth_gasPrice etc.
+  // The backend proxy doesn't reliably forward all RPC methods WDK needs.
+  // Backend proxy is used for x402-gated routes (RPC, IPFS) — not for bundler.
   const pimlicoUrl = getPimlicoUrl();
-  const hasApiKey = pimlicoUrl.includes("apikey=");
 
-  if (hasApiKey) {
-    // Sponsored mode — gas is free, no token approval needed
-    return {
-      chainId: SEPOLIA_CHAIN_ID,
-      blockchain: "ethereum",
-      provider: "", // filled at runtime
-      bundlerUrl: pimlicoUrl,
-      paymasterUrl: pimlicoUrl,
-      isSponsored: true,
-      entryPointAddress: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
-      safeModulesVersion: "0.3.0" as const,
-    };
-  }
-
-  // Token paymaster fallback — agents pay gas in USDT
   return {
     chainId: SEPOLIA_CHAIN_ID,
     blockchain: "ethereum",
-    provider: "", // filled at runtime
-    bundlerUrl: pimlicoUrl,
-    paymasterUrl: pimlicoUrl,
-    paymasterAddress: "0x777777777777AeC03fd955926DbF81597e66834C",
+    provider: getRpcUrl(), // Alchemy for standard RPC (getCode, gasPrice, etc.)
+    bundlerUrl: pimlicoUrl, // Pimlico for bundler operations
+    paymasterUrl: pimlicoUrl, // Pimlico for paymaster
+    isSponsored: true,
     entryPointAddress: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
     safeModulesVersion: "0.3.0" as const,
-    paymasterToken: { address: USDT_ADDRESS },
-    transferMaxFee: 100000,
   };
 }
 
 // ── RPC ──
 
 export function getRpcUrl(): string {
+  // Prefer explicit RPC_URL env var for local dev / fallback
   const rpc = process.env.RPC_URL;
   if (rpc && rpc.trim().length > 0) return rpc.trim();
-  throw new Error("RPC_URL environment variable is required");
+
+  // Route through backend
+  return `${getSouqApiUrl()}/rpc`;
 }
 
 // ── Seed Phrase ──
 
+const SOUQ_SEED_DIR = join(homedir(), ".souq");
+const SOUQ_SEED_PATH = join(SOUQ_SEED_DIR, "seed");
+
 export function getSeedPhrase(): string {
-  const seed = process.env.WDK_SEED;
-  if (seed && seed.trim().length > 0) return seed.trim();
-  throw new Error("WDK_SEED environment variable is required");
+  // 1. Check WDK_SEED env var
+  const envSeed = process.env.WDK_SEED;
+  if (envSeed && envSeed.trim().length > 0) return envSeed.trim();
+
+  // 2. Check ~/.souq/seed file
+  if (existsSync(SOUQ_SEED_PATH)) {
+    const fileSeed = readFileSync(SOUQ_SEED_PATH, "utf-8").trim();
+    if (fileSeed.length > 0) return fileSeed;
+  }
+
+  // 3. Generate new seed phrase via WDK and save it
+  // Use dynamic import to avoid circular deps (config is loaded before WDK is available)
+  // This is a sync function, so we generate using the seed path placeholder
+  // and the actual generation happens in getOrCreateSeedPhrase() async variant
+  throw new Error(
+    "No seed phrase found. Call getOrCreateSeedPhrase() to auto-generate one, " +
+    "or set WDK_SEED env var, or place a seed in ~/.souq/seed"
+  );
 }
 
-// ── IPFS ──
+/**
+ * Async version that can auto-generate a seed phrase if none exists.
+ * Checks WDK_SEED env -> ~/.souq/seed file -> generates new via WDK.
+ */
+export async function getOrCreateSeedPhrase(): Promise<string> {
+  // 1. Check WDK_SEED env var
+  const envSeed = process.env.WDK_SEED;
+  if (envSeed && envSeed.trim().length > 0) return envSeed.trim();
 
-export const IPFS_GATEWAY = "https://gateway.pinata.cloud/ipfs/";
+  // 2. Check ~/.souq/seed file
+  if (existsSync(SOUQ_SEED_PATH)) {
+    const fileSeed = readFileSync(SOUQ_SEED_PATH, "utf-8").trim();
+    if (fileSeed.length > 0) return fileSeed;
+  }
 
-export function getPinataJwt(): string {
-  const jwt = process.env.PINATA_JWT;
-  if (jwt && jwt.trim().length > 0) return jwt.trim();
-  throw new Error("PINATA_JWT environment variable is required");
+  // 3. Generate new seed phrase via WDK
+  const WDK = (await import("@tetherto/wdk")).default;
+  const seed = WDK.getRandomSeedPhrase();
+
+  // Save to ~/.souq/seed with owner-only permissions
+  if (!existsSync(SOUQ_SEED_DIR)) {
+    mkdirSync(SOUQ_SEED_DIR, { recursive: true, mode: 0o700 });
+  }
+  writeFileSync(SOUQ_SEED_PATH, seed + "\n", { mode: 0o600 });
+
+  console.error(`[souq] Generated new seed phrase, saved to ${SOUQ_SEED_PATH}`);
+  return seed;
 }
 
 // ── Helpers ──

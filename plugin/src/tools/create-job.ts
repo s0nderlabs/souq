@@ -6,6 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   encodeFunctionData,
+  encodeAbiParameters,
   zeroAddress,
   decodeEventLog,
   type Address,
@@ -39,6 +40,26 @@ const CreateJobSchema = z.object({
     .describe(
       "Whether to use the SigilGateHook for per-job compliance policies. Default false."
     ),
+  clientAgentId: z
+    .number()
+    .default(0)
+    .describe("ERC-8004 agent ID of the client. Required when useHook=true."),
+  providerAgentId: z
+    .number()
+    .default(0)
+    .describe("ERC-8004 agent ID of the provider. Required when useHook=true and provider is set."),
+  evaluatorAgentId: z
+    .number()
+    .default(0)
+    .describe("ERC-8004 agent ID of the evaluator. Required when useHook=true."),
+  providerPolicies: z
+    .array(z.string())
+    .default([])
+    .describe("Sigil policy IDs (bytes32 hex) for the provider. Required when useHook=true and provider is set."),
+  evaluatorPolicies: z
+    .array(z.string())
+    .default([])
+    .describe("Sigil policy IDs (bytes32 hex) for the evaluator. Required when useHook=true."),
 });
 
 interface CreateJobResult {
@@ -109,6 +130,29 @@ async function createJobHandler(
     const evaluatorAddress = params.evaluator as Address;
     const hookAddress: Address = params.useHook ? HOOK_ADDRESS : zeroAddress;
 
+    // Encode optParams for the hook (if enabled)
+    let optParams: Hex = "0x";
+    if (params.useHook) {
+      // SigilGateHook.afterCreateJob expects:
+      // abi.encode(clientAgentId, providerAgentId, evaluatorAgentId, providerPolicies[], evaluatorPolicies[])
+      optParams = encodeAbiParameters(
+        [
+          { type: "uint256" },
+          { type: "uint256" },
+          { type: "uint256" },
+          { type: "bytes32[]" },
+          { type: "bytes32[]" },
+        ],
+        [
+          BigInt(params.clientAgentId),
+          BigInt(params.providerAgentId),
+          BigInt(params.evaluatorAgentId),
+          (params.providerPolicies as string[]).map((p) => p as Hex),
+          (params.evaluatorPolicies as string[]).map((p) => p as Hex),
+        ]
+      );
+    }
+
     // Encode createJob calldata
     const data = encodeFunctionData({
       abi: escrowAbi,
@@ -119,7 +163,7 @@ async function createJobHandler(
         expiredAt,
         descriptionHash,
         hookAddress,
-        "0x" as Hex, // optParams: empty bytes
+        optParams,
       ],
     });
 

@@ -1,0 +1,25 @@
+{
+  "name": "souq-api",
+  "version": "1.0.0",
+  "description": "Souq Protocol API — proxy + gasless payments + WebSocket relay",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@semanticio/wdk-wallet-evm-x402-facilitator": "^1.0.0-beta.2",
+    "@tetherto/wdk-wallet-evm": "^1.0.0-beta.8",
+    "@x402/core": "^2.2.0",
+    "@x402/evm": "^2.2.0",
+    "hono": "^4.7.0",
+    "viem": "^2.47.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250313.0",
+    "typescript": "^5.3.0",
+    "wrangler": "^4.0.0"
+  },
+  "license": "Apache-2.0"
+}
