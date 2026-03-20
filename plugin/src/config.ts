@@ -10,7 +10,16 @@ export const HOOK_ADDRESS = "0xEB5d16A2A2617e22ffDD85CD75f709E5eF0fb2EF" as Addr
 export const USDT_ADDRESS = "0xABfd273ef83Ed85DBe776E4311118c3F2da27469" as Address; // USDT0Mock
 export const IDENTITY_REGISTRY = "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Address;
 export const REPUTATION_REGISTRY = "0x8004B663056A597Dffe9eCcC1965A193B7388713" as Address;
+export const SIGIL_ADDRESS = "0x2A1F759EC07d1a4177f845666dA0a6d82c37c11f" as Address;
 export const TREASURY_ADDRESS = "0x06B74fe8070C96D92e3a2A8A871849Ac81e4c09e" as Address;
+
+// ── Sigil Server ──
+
+export const SIGIL_SERVER_URL = process.env.SIGIL_SERVER_URL || "https://sigil-server-production.up.railway.app";
+
+export function getSigilApiKey(): string | undefined {
+  return process.env.SIGIL_API_KEY;
+}
 
 // ── Chain Config ──
 
