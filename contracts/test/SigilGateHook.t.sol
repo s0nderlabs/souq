@@ -49,10 +49,10 @@ contract SigilGateHookTest is Test {
             address(identity)
         );
 
-        // Setup agentId ownership
-        identity.setOwner(CLIENT_AGENT_ID, client);
-        identity.setOwner(PROVIDER_AGENT_ID, provider);
-        identity.setOwner(EVALUATOR_AGENT_ID, evaluator);
+        // Setup agentId ownership + wallet (registerAgent sets both)
+        identity.registerAgent(CLIENT_AGENT_ID, client);
+        identity.registerAgent(PROVIDER_AGENT_ID, provider);
+        identity.registerAgent(EVALUATOR_AGENT_ID, evaluator);
 
         // Setup Sigil compliance (default: one policy each)
         sigil.setCompliance(provider, PROVIDER_POLICY, true);
@@ -173,7 +173,7 @@ contract SigilGateHookTest is Test {
     }
 
     function test_afterCreateJob_revert_evaluatorAgentIdMismatch() public {
-        identity.setOwner(EVALUATOR_AGENT_ID, attacker);
+        identity.setAgentWallet(EVALUATOR_AGENT_ID, attacker);
 
         vm.prank(client);
         vm.expectRevert(abi.encodeWithSelector(SigilGateHook.AgentIdMismatch.selector, EVALUATOR_AGENT_ID, evaluator, attacker));
@@ -181,7 +181,7 @@ contract SigilGateHookTest is Test {
     }
 
     function test_afterCreateJob_revert_clientAgentIdMismatch() public {
-        identity.setOwner(CLIENT_AGENT_ID, attacker);
+        identity.setAgentWallet(CLIENT_AGENT_ID, attacker);
 
         vm.prank(client);
         vm.expectRevert(abi.encodeWithSelector(SigilGateHook.AgentIdMismatch.selector, CLIENT_AGENT_ID, client, attacker));
@@ -334,7 +334,7 @@ contract SigilGateHookTest is Test {
 
     function test_beforeSetProvider_revert_agentIdMismatch() public {
         uint256 id = _createOpenJob();
-        identity.setOwner(PROVIDER_AGENT_ID, attacker);
+        identity.setAgentWallet(PROVIDER_AGENT_ID, attacker);
 
         bytes memory optParams = abi.encode(PROVIDER_AGENT_ID);
         vm.prank(client);

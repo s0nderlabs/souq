@@ -3,4 +3,5 @@ pragma solidity ^0.8.23;
 
 interface IIdentityRegistry {
     function ownerOf(uint256 tokenId) external view returns (address);
+    function getAgentWallet(uint256 agentId) external view returns (address);
 }

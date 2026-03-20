@@ -198,10 +198,10 @@ contract SigilGateHook is IACPHook {
         }
     }
 
-    function _verifyAgentId(uint256 agentId, address expectedOwner) internal view {
-        address actual = identityRegistry.ownerOf(agentId);
-        if (actual != expectedOwner) {
-            revert AgentIdMismatch(agentId, expectedOwner, actual);
+    function _verifyAgentId(uint256 agentId, address expectedWallet) internal view {
+        address actual = identityRegistry.getAgentWallet(agentId);
+        if (actual != expectedWallet) {
+            revert AgentIdMismatch(agentId, expectedWallet, actual);
         }
     }
 }

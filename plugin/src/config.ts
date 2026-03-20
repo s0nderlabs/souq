@@ -6,7 +6,7 @@ import type { Address } from "viem";
 // ── Deployed Contract Addresses (Sepolia) ──
 
 export const ESCROW_ADDRESS = "0x2AE839f237187102713c8c05736fda65430B17f0" as Address;
-export const HOOK_ADDRESS = "0xA59fCfe0Ec8eC0C18A2a7924A7B3877C2E112303" as Address;
+export const HOOK_ADDRESS = "0xEB5d16A2A2617e22ffDD85CD75f709E5eF0fb2EF" as Address;
 export const USDT_ADDRESS = "0xABfd273ef83Ed85DBe776E4311118c3F2da27469" as Address; // USDT0Mock
 export const IDENTITY_REGISTRY = "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Address;
 export const REPUTATION_REGISTRY = "0x8004B663056A597Dffe9eCcC1965A193B7388713" as Address;
