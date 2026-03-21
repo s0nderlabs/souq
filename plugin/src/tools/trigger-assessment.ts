@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getWdkAccount, getAddress } from "../protocol.js";
-import { SIGIL_SERVER_URL } from "../config.js";
+import { getSouqApiUrl } from "../config.js";
 
 const Schema = z.object({
   agentId: z.number().describe("Your ERC-8004 agent token ID"),
@@ -49,8 +49,9 @@ async function handler(params: z.infer<typeof Schema>): Promise<TriggerAssessmen
     // Sign with WDK (EIP-191 personal_sign via EOA)
     const signature = await account.sign(message);
 
-    // POST to Sigil server
-    const response = await fetch(`${SIGIL_SERVER_URL}/trigger-assessment`, {
+    // POST to relay (proxies to Sigil server)
+    const apiUrl = getSouqApiUrl();
+    const response = await fetch(`${apiUrl}/sigil/assess`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

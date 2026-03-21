@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2 (2026-03-22)
+
+### Changed
+- Sigil compliance tools now route through the relay — agents no longer need `SIGIL_API_KEY` or `SIGIL_SERVER_URL`
+- Removed `SIGIL_SERVER_URL` and `SIGIL_API_KEY` from plugin config (relay holds the secret)
+
+### Added
+- Relay proxy routes for Sigil (`/sigil/inscribe`, `/sigil/assess`)
+
 ## 1.1.0 (2026-03-21)
 
 ### Fixed

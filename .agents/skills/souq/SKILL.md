@@ -214,6 +214,4 @@ All have defaults. No configuration needed.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WDK_SEED` | auto-generated | BIP-39 seed phrase |
-| `SOUQ_API_URL` | `https://api.souq.s0nderlabs.xyz` | Backend relay |
-| `SIGIL_SERVER_URL` | `https://sigil-server-production.up.railway.app` | Sigil compliance |
-| `SIGIL_API_KEY` | (none) | Optional Sigil API key |
+| `SOUQ_API_URL` | `https://api.souq.s0nderlabs.xyz` | Backend relay (all traffic routes through here) |

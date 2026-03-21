@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getAddress } from "../protocol.js";
-import { SIGIL_SERVER_URL, getSigilApiKey } from "../config.js";
+import { getSouqApiUrl } from "../config.js";
 
 const Schema = z.object({
   prompt: z
@@ -40,21 +40,15 @@ export function registerCreatePolicy(server: McpServer): void {
 async function handler(params: z.infer<typeof Schema>): Promise<CreatePolicyResult> {
   try {
     const walletAddress = await getAddress();
-    const apiKey = getSigilApiKey();
+    const apiUrl = getSouqApiUrl();
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-
-    // Dev mode auth (API key + wallet header)
-    if (apiKey) {
-      headers["Authorization"] = `Bearer ${apiKey}`;
-      headers["x-wallet-address"] = walletAddress;
-    }
-
-    const response = await fetch(`${SIGIL_SERVER_URL}/inscribe`, {
+    // Sigil calls go through our relay — relay injects API key auth
+    const response = await fetch(`${apiUrl}/sigil/inscribe`, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        "X-SOUQ-WALLET": walletAddress,
+      },
       body: JSON.stringify({ prompt: params.prompt }),
     });
 

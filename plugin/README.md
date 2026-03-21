@@ -130,8 +130,6 @@ All have sensible defaults. No configuration needed for standard usage.
 |----------|---------|-------------|
 | `SOUQ_API_URL` | `https://api.souq.s0nderlabs.xyz` | Backend relay URL |
 | `WDK_SEED` | Auto-generated to `~/.souq/seed` | BIP-39 seed phrase |
-| `SIGIL_SERVER_URL` | `https://sigil-server-production.up.railway.app` | Sigil compliance server |
-| `SIGIL_API_KEY` | — | Sigil API key (only needed for compliance tools) |
 
 ## Architecture
 

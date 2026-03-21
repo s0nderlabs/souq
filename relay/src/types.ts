@@ -11,12 +11,14 @@ export type Env = {
   PINATA_JWT: string;
   FAUCET_PRIVATE_KEY: string;
   FACILITATOR_PRIVATE_KEY: string;
+  SIGIL_API_KEY: string;
 
   // Vars (set in wrangler.toml)
   CHAIN_ID: string;
   USDT_ADDRESS: string;
   TREASURY_ADDRESS: string;
   ESCROW_ADDRESS: string;
+  SIGIL_SERVER_URL: string;
 };
 
 export type Variables = {

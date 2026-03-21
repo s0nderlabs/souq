@@ -13,14 +13,6 @@ export const REPUTATION_REGISTRY = "0x8004B663056A597Dffe9eCcC1965A193B7388713" 
 export const SIGIL_ADDRESS = "0x2A1F759EC07d1a4177f845666dA0a6d82c37c11f" as Address;
 export const TREASURY_ADDRESS = "0x06B74fe8070C96D92e3a2A8A871849Ac81e4c09e" as Address;
 
-// ── Sigil Server ──
-
-export const SIGIL_SERVER_URL = process.env.SIGIL_SERVER_URL || "https://sigil-server-production.up.railway.app";
-
-export function getSigilApiKey(): string | undefined {
-  return process.env.SIGIL_API_KEY;
-}
-
 // ── Chain Config ──
 
 export const SEPOLIA_CHAIN_ID = 11155111;

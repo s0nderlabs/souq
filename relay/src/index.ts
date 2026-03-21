@@ -10,6 +10,7 @@ import rpcRoutes from "./routes/rpc";
 import bundlerRoutes from "./routes/bundler";
 import ipfsRoutes from "./routes/ipfs";
 import faucetRoutes from "./routes/faucet";
+import sigilRoutes from "./routes/sigil";
 
 const app = new Hono<AppContext>();
 
@@ -59,6 +60,7 @@ app.use("/pin", x402Middleware);
 app.route("/", rpcRoutes);
 app.route("/", bundlerRoutes);
 app.route("/", ipfsRoutes);
+app.route("/", sigilRoutes);
 
 // WebSocket relay
 app.get("/relay", async (c) => {
