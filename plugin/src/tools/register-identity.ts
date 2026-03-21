@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, type Hex } from "viem";
 import { bytesToHex } from "viem";
-import { getAddress, sendTx, getPublicClient } from "../protocol.js";
+import { getAddress, sendTx, getPublicClient, waitForUserOp } from "../protocol.js";
 import { IDENTITY_REGISTRY, explorerTxUrl, getSeedPhrase } from "../config.js";
 import { identityAbi } from "../abi/identity.js";
 import { pinJson, toIpfsUri } from "../ipfs.js";
@@ -86,13 +86,14 @@ async function handler(params: z.infer<typeof Schema>): Promise<RegisterIdentity
 
     // Wait for receipt and parse agentId from return value
     const publicClient = getPublicClient();
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: hash as Hex });
+    const { receipt } = await waitForUserOp(hash);
+    const txReceipt = receipt as { logs: Array<{ address: string; topics: string[]; data: string }> };
 
     // Try to extract agentId from Transfer event (ERC-721 mint)
     // Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
     let agentId = "unknown";
     const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-    for (const log of receipt.logs) {
+    for (const log of txReceipt.logs) {
       if (
         log.address.toLowerCase() === IDENTITY_REGISTRY.toLowerCase() &&
         log.topics[0] === TRANSFER_TOPIC &&

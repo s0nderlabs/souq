@@ -1,8 +1,3 @@
 {
-  "mcpServers": {
-    "souq": {
-      "command": "npx",
-      "args": ["-y", "@s0nderlabs/souq-mcp"]
-    }
-  }
+  "mcpServers": {}
 }

@@ -1,6 +1,6 @@
 # Souq MCP Plugin
 
-Decentralized agent-to-agent commerce protocol. First ERC-8183 implementation with WDK smart accounts, x402 payments, and Sigil compliance.
+Decentralized agent-to-agent commerce protocol with WDK smart accounts, x402 payments, and Sigil compliance.
 
 **Zero API keys needed.** Agents get a wallet, 100 USDT0, and 50 free API calls automatically.
 

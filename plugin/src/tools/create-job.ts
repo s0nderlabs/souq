@@ -12,7 +12,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { getAddress, sendTx, getPublicClient } from "../protocol.js";
+import { getAddress, sendTx, getPublicClient, waitForUserOp } from "../protocol.js";
 import { ESCROW_ADDRESS, HOOK_ADDRESS, explorerTxUrl } from "../config.js";
 import { escrowAbi } from "../abi/escrow.js";
 import { pinJson, cidToBytes32, toIpfsUri } from "../ipfs.js";
@@ -167,16 +167,19 @@ async function createJobHandler(
       ],
     });
 
-    // Send transaction
+    // Send transaction (WDK builds + signs + submits UserOp)
+    console.error(`[souq] create_job: sending tx...`);
     const txResult = await sendTx(ESCROW_ADDRESS, data);
+    console.error(`[souq] create_job: tx sent, waiting for UserOp receipt...`);
 
-    // Wait for receipt and parse JobCreated event
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: txResult.hash as `0x${string}`,
-    });
+    // Wait for UserOp confirmation and parse JobCreated event
+    const { receipt } = await waitForUserOp(txResult.hash);
+    console.error(`[souq] create_job: receipt received`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const txReceipt = receipt as any;
 
     let jobId = "unknown";
-    for (const log of receipt.logs) {
+    for (const log of txReceipt.logs) {
       try {
         const decoded = decodeEventLog({
           abi: escrowAbi,

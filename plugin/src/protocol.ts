@@ -63,9 +63,23 @@ export async function sendTx(
   data: Hex
 ): Promise<{ hash: string; fee: bigint }> {
   const account = await getWdkAccount();
-  const result = await account.sendTransaction({ to, value: 0n, data });
-  console.error(`[souq] Tx sent: ${result.hash}`);
-  return result;
+  console.error(`[souq] Sending tx to ${to}...`);
+  const start = Date.now();
+  try {
+    const result = await account.sendTransaction({ to, value: 0n, data });
+    console.error(`[souq] Tx sent in ${((Date.now() - start) / 1000).toFixed(1)}s: ${result.hash}`);
+    return result;
+  } catch (err: unknown) {
+    // WDK internally calls waitForTransactionReceipt with a UserOp hash, which always times out.
+    // Extract the hash from the error and return it — we'll poll via waitForUserOp instead.
+    const msg = err instanceof Error ? err.message : String(err);
+    const hashMatch = msg.match(/hash "([0-9a-fA-Fx]+)"/);
+    if (hashMatch && msg.includes("Timed out")) {
+      console.error(`[souq] WDK receipt timeout (expected) — hash: ${hashMatch[1]}, elapsed: ${((Date.now() - start) / 1000).toFixed(1)}s`);
+      return { hash: hashMatch[1], fee: 0n };
+    }
+    throw err;
+  }
 }
 
 // USDT approve(address,uint256) function selector — used to detect approve calls
@@ -97,9 +111,62 @@ export async function batchTx(
     fixedCalls.push({ to: c.to, value: c.value ?? 0n, data: c.data });
   }
 
-  const result = await account.sendTransaction(fixedCalls);
-  console.error(`[souq] Batch tx sent (${fixedCalls.length} calls): ${result.hash}`);
-  return result;
+  console.error(`[souq] Sending batch tx (${fixedCalls.length} calls)...`);
+  const start = Date.now();
+  try {
+    const result = await account.sendTransaction(fixedCalls);
+    console.error(`[souq] Batch tx sent in ${((Date.now() - start) / 1000).toFixed(1)}s: ${result.hash}`);
+    return result;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const hashMatch = msg.match(/hash "([0-9a-fA-Fx]+)"/);
+    if (hashMatch && msg.includes("Timed out")) {
+      console.error(`[souq] WDK batch receipt timeout (expected) — hash: ${hashMatch[1]}, elapsed: ${((Date.now() - start) / 1000).toFixed(1)}s`);
+      return { hash: hashMatch[1], fee: 0n };
+    }
+    throw err;
+  }
+}
+
+// ── UserOp Receipt Polling ──
+
+import { originalFetch } from "./x402-fetch-patch.js";
+import { getSouqApiUrl } from "./config.js";
+
+/**
+ * Wait for a UserOp hash to be confirmed via bundler polling.
+ * WDK returns UserOp hashes (not tx hashes), which viem can't track.
+ * Returns the bundler's receipt directly (includes logs for event parsing).
+ */
+export async function waitForUserOp(
+  userOpHash: string,
+  timeoutMs = 120_000
+): Promise<{ transactionHash: string; receipt: { logs: Array<{ address: string; topics: string[]; data: string }> } }> {
+  const apiUrl = getSouqApiUrl();
+  const addr = await getAddress();
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await originalFetch(`${apiUrl}/bundler`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-SOUQ-WALLET": addr },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getUserOperationReceipt", params: [userOpHash] }),
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const json = await res.json() as any;
+      if (json.result?.receipt?.transactionHash) {
+        return {
+          transactionHash: json.result.receipt.transactionHash,
+          receipt: json.result.receipt,
+        };
+      }
+    } catch {
+      // Network error — keep polling
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  throw new Error(`UserOp ${userOpHash} not confirmed after ${timeoutMs / 1000}s`);
 }
 
 // ── Read-only Public Client (no WDK needed) ──

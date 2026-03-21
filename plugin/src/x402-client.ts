@@ -107,6 +107,9 @@ async function getHttpClient(): Promise<x402HTTPClient> {
   return cachedHttpClient;
 }
 
+// Note: EIP-3009 transferWithAuthorization uses random nonces (not sequential),
+// so concurrent payments are safe — no serialization needed.
+
 // MARK: - x402 Fetch (uses originalFetch to avoid recursion with global patch)
 
 import { originalFetch } from "./x402-fetch-patch.js";
@@ -136,59 +139,59 @@ export async function x402FetchRaw(
     }
   }
 
-  // Step 1: Probe with originalFetch (not the patched one)
-  const initialResponse = await originalFetch(url, init);
+  // Step 1: Probe with originalFetch (retry on transient network errors)
+  let initialResponse: Response;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      initialResponse = await originalFetch(url, init);
+      break;
+    } catch (err) {
+      if (attempt === 2) throw err;
+      console.error(`[souq] x402 probe failed (attempt ${attempt + 1}/3): ${err instanceof Error ? err.message : err}`);
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
 
-  if (initialResponse.status !== 402) {
-    return initialResponse;
+  if (initialResponse!.status !== 402) {
+    return initialResponse!;
   }
 
   // Step 2: Parse 402 response
   let paymentRequired: PaymentRequired;
   try {
-    paymentRequired = (await initialResponse.json()) as PaymentRequired;
+    paymentRequired = (await initialResponse!.json()) as PaymentRequired;
   } catch {
     throw new Error("Invalid 402 response: could not parse payment requirements");
   }
-
   if (!paymentRequired.accepts || paymentRequired.accepts.length === 0) {
     throw new Error("No payment options available in 402 response");
   }
 
-  // Step 3: Create payment payload via x402Client
+  // Step 3: Sign payment (EIP-3009 uses random nonces — concurrent payments are safe)
   const httpClient = await getHttpClient();
   const paymentPayload = await httpClient.createPaymentPayload(paymentRequired);
-
-  // Step 4: Encode and retry with payment header
-  // The x402 library returns { "PAYMENT-SIGNATURE": "..." } but our middleware expects "x-payment"
   const encodedPayment = httpClient.encodePaymentSignatureHeader(paymentPayload);
   const paymentValue = typeof encodedPayment === "string"
     ? encodedPayment
     : (encodedPayment as Record<string, string>)["PAYMENT-SIGNATURE"] ?? Object.values(encodedPayment as Record<string, string>)[0];
 
+  // Step 4: Retry with payment header
   const existingHeaders = init?.headers instanceof Headers
     ? Object.fromEntries(init.headers.entries())
     : (init?.headers as Record<string, string>) || {};
 
-  const paidInit: RequestInit = {
+  const paidResponse = await originalFetch(url, {
     ...init,
-    headers: {
-      ...existingHeaders,
-      "x-payment": paymentValue,
-    },
-  };
-
-  const paidResponse = await originalFetch(url, paidInit);
+    headers: { ...existingHeaders, "x-payment": paymentValue },
+  });
 
   if (paidResponse.status === 402) {
-    let errorMessage = "Payment rejected";
+    let msg = "Payment rejected";
     try {
-      const errorBody = (await paidResponse.json()) as { reason?: string; message?: string };
-      errorMessage = `Payment rejected: ${errorBody.reason || errorBody.message || "Unknown reason"}`;
-    } catch {
-      // Use default error message
-    }
-    throw new Error(errorMessage);
+      const body = (await paidResponse.json()) as { reason?: string; message?: string };
+      msg = `Payment rejected: ${body.reason || body.message || "Unknown reason"}`;
+    } catch { /* use default */ }
+    throw new Error(msg);
   }
 
   return paidResponse;
@@ -233,12 +236,12 @@ export async function handleX402Payment(
   });
 
   if (paidResponse.status === 402) {
-    let errorMessage = "Payment rejected";
+    let msg = "Payment rejected";
     try {
-      const errorBody = (await paidResponse.json()) as { reason?: string; message?: string };
-      errorMessage = `Payment rejected: ${errorBody.reason || errorBody.message || "Unknown reason"}`;
+      const body = (await paidResponse.json()) as { reason?: string; message?: string };
+      msg = `Payment rejected: ${body.reason || body.message || "Unknown reason"}`;
     } catch { /* use default */ }
-    throw new Error(errorMessage);
+    throw new Error(msg);
   }
   return paidResponse;
 }

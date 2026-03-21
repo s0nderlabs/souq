@@ -38,22 +38,33 @@ export function createX402Transport() {
       headers.set("X-SOUQ-WALLET", cachedWallet);
     }
 
-    // Probe request with bootstrap wallet header
-    const response = await originalFetch(input, { ...init, headers });
+    // Probe with retry (transient network errors on Cloudflare can cause fetch to fail)
+    let response: Response;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        response = await originalFetch(input, { ...init, headers });
+        break;
+      } catch (err) {
+        if (attempt === 2) throw err;
+        console.error(`[souq] x402 transport probe failed (attempt ${attempt + 1}/3): ${err instanceof Error ? err.message : err}`);
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
 
     // If not 402, return as-is (bootstrap or free)
-    if (response.status !== 402) {
-      return response;
+    if (response!.status !== 402) {
+      return response!;
     }
 
     // 402 → handle payment using the already-received 402 response (no re-probe)
     const { handleX402Payment } = await import("./x402-client.js");
     const url = typeof input === "string" ? input : (input as Request).url;
-    return handleX402Payment(url, init, response);
+    return handleX402Payment(url, init, response!);
   };
 
   return http(rpcUrl, {
     retryCount: 0,
+    timeout: 60_000, // 60s — x402 flow needs probe + payment signing + retry
     fetchFn: x402FetchFn,
   } as any);
 }
