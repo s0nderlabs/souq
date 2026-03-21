@@ -5,6 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { formatUnits, type Address } from "viem";
 import { initWdk, getAddress, getPublicClient } from "../protocol.js";
+import { warmupX402Client } from "../x402-client.js";
 import { USDT_ADDRESS, USDT_DECIMALS, explorerAddressUrl, getSeedPhrase, getSouqApiUrl } from "../config.js";
 import { usdtAbi } from "../abi/usdt.js";
 import { deriveKeypairFromSeed } from "../encryption.js";
@@ -58,6 +59,9 @@ async function setupWalletHandler(
     // Get smart account address
     const address = await getAddress();
     const publicClient = getPublicClient();
+
+    // Pre-warm x402 signer so first paid call doesn't cold-start
+    await warmupX402Client();
 
     // Request faucet tokens from backend
     let faucetResult: { status: string; amount?: string } = { status: "skipped" };

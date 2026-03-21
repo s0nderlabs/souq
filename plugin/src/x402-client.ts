@@ -247,6 +247,14 @@ export async function handleX402Payment(
 }
 
 /**
+ * Pre-warm the x402 HTTP client (signer + payment client).
+ * Call after wallet init to avoid cold start on first paid request.
+ */
+export async function warmupX402Client(): Promise<void> {
+  await getHttpClient();
+}
+
+/**
  * Reset cached client (call when wallet changes).
  */
 export function resetX402Client(): void {
