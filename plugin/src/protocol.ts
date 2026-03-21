@@ -2,16 +2,15 @@ import WDK from "@tetherto/wdk";
 import WalletManagerEvmErc4337 from "@tetherto/wdk-wallet-evm-erc-4337";
 import {
   createPublicClient,
-  http,
   encodeFunctionData,
   type Address,
   type Hex,
   type PublicClient,
 } from "viem";
 import { sepolia } from "viem/chains";
+import { createX402Transport } from "./x402-transport.js";
 import {
   getOrCreateSeedPhrase,
-  getRpcUrl,
   USDT_ADDRESS,
   getWdkSepoliaConfig,
   WDK_WALLET_NAME,
@@ -33,11 +32,7 @@ export async function initWdk(): Promise<void> {
   if (wdkInstance && wdkAccount) return;
 
   const seed = await getOrCreateSeedPhrase();
-  const wdkConfig = getWdkSepoliaConfig();
-
-  // Use bundler URL as provider for WDK — ensures gas price matches Pimlico's requirements
-  // The separate publicClient (viem) uses getRpcUrl() for read-only calls
-  const config = { ...wdkConfig, provider: wdkConfig.bundlerUrl };
+  const config = getWdkSepoliaConfig();
 
   wdkInstance = new WDK(seed);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,10 +106,9 @@ export async function batchTx(
 
 export function getPublicClient(): PublicClient {
   if (!publicClientInstance) {
-    const rpcUrl = getRpcUrl();
     publicClientInstance = createPublicClient({
       chain: sepolia,
-      transport: http(rpcUrl),
+      transport: createX402Transport(),
     });
   }
   return publicClientInstance;
@@ -128,6 +122,7 @@ export function dispose(): void {
     wdkInstance = null;
     wdkAccount = null;
     wdkAddress = null;
+    publicClientInstance = null; // Reset so next getPublicClient() creates fresh with new wallet
     resetX402Client();
     console.error("[souq] WDK disposed");
   }

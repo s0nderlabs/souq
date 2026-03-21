@@ -57,10 +57,17 @@ faucet.post("/faucet", async (c) => {
       args: [address as `0x${string}`, FAUCET_AMOUNT],
     });
 
-    // Record the claim
+    // Record the faucet claim
     await c.env.BOOTSTRAP_KV.put(
       kvKey,
       JSON.stringify({ claimedAt: Date.now() })
+    );
+
+    // Create bootstrap record — gives N free API calls for onboarding
+    const bootstrapKey = `bootstrap:${address.toLowerCase()}`;
+    await c.env.BOOTSTRAP_KV.put(
+      bootstrapKey,
+      JSON.stringify({ claimedAt: Date.now(), callCount: 0 })
     );
 
     return c.json({

@@ -107,33 +107,38 @@ async function getHttpClient(): Promise<x402HTTPClient> {
   return cachedHttpClient;
 }
 
-// MARK: - x402 Fetch Wrapper
+// MARK: - x402 Fetch (uses originalFetch to avoid recursion with global patch)
+
+import { originalFetch } from "./x402-fetch-patch.js";
 
 /**
- * x402-aware fetch wrapper for Souq API calls.
- *
- * Flow:
- * 1. Make initial request to the Souq API
- * 2. If 402 returned, parse payment requirements
- * 3. Use x402Client to create signed payment payload
- * 4. Retry with X-Payment header
- * 5. Return response
- *
- * @param path - API path (e.g., "/pin", "/rpc")
- * @param init - Standard RequestInit options
- * @returns Response from server
+ * x402-aware fetch for a full URL. Used by the global fetch patch and x402 transport.
+ * Uses `originalFetch` (the unpatched fetch) to avoid infinite recursion.
  */
-export async function x402Fetch(
+export async function x402FetchRaw(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
   const apiUrl = getSouqApiUrl();
   const url = `${apiUrl}${path}`;
 
-  // Step 1: Make initial request
-  const initialResponse = await fetch(url, init);
+  // Ensure X-SOUQ-WALLET header is set for bootstrap middleware
+  if (!init?.headers || !(init.headers as Record<string, string>)["X-SOUQ-WALLET"]) {
+    try {
+      const { getAddress } = await import("./protocol.js");
+      const addr = await getAddress();
+      const existingHeaders = init?.headers instanceof Headers
+        ? Object.fromEntries(init.headers.entries())
+        : (init?.headers as Record<string, string>) || {};
+      init = { ...init, headers: { ...existingHeaders, "X-SOUQ-WALLET": addr } };
+    } catch {
+      // WDK not initialized yet — proceed without wallet header
+    }
+  }
 
-  // If not 402, return as-is
+  // Step 1: Probe with originalFetch (not the patched one)
+  const initialResponse = await originalFetch(url, init);
+
   if (initialResponse.status !== 402) {
     return initialResponse;
   }
@@ -155,23 +160,26 @@ export async function x402Fetch(
   const paymentPayload = await httpClient.createPaymentPayload(paymentRequired);
 
   // Step 4: Encode and retry with payment header
-  const paymentHeaders = httpClient.encodePaymentSignatureHeader(paymentPayload);
+  // The x402 library returns { "PAYMENT-SIGNATURE": "..." } but our middleware expects "x-payment"
+  const encodedPayment = httpClient.encodePaymentSignatureHeader(paymentPayload);
+  const paymentValue = typeof encodedPayment === "string"
+    ? encodedPayment
+    : (encodedPayment as Record<string, string>)["PAYMENT-SIGNATURE"] ?? Object.values(encodedPayment as Record<string, string>)[0];
 
-  const originalHeaders = init?.headers instanceof Headers
+  const existingHeaders = init?.headers instanceof Headers
     ? Object.fromEntries(init.headers.entries())
     : (init?.headers as Record<string, string>) || {};
 
   const paidInit: RequestInit = {
     ...init,
     headers: {
-      ...originalHeaders,
-      ...paymentHeaders,
+      ...existingHeaders,
+      "x-payment": paymentValue,
     },
   };
 
-  const paidResponse = await fetch(url, paidInit);
+  const paidResponse = await originalFetch(url, paidInit);
 
-  // Check for payment rejection
   if (paidResponse.status === 402) {
     let errorMessage = "Payment rejected";
     try {
@@ -183,6 +191,55 @@ export async function x402Fetch(
     throw new Error(errorMessage);
   }
 
+  return paidResponse;
+}
+
+/** Alias for backward compatibility. */
+export const x402Fetch = x402FetchRaw;
+
+/**
+ * Handle x402 payment given an already-received 402 response.
+ * Avoids a redundant probe when the caller already has the 402 body.
+ */
+export async function handleX402Payment(
+  url: string,
+  init: RequestInit | undefined,
+  response402: Response
+): Promise<Response> {
+  let paymentRequired: PaymentRequired;
+  try {
+    paymentRequired = (await response402.json()) as PaymentRequired;
+  } catch {
+    throw new Error("Invalid 402 response: could not parse payment requirements");
+  }
+  if (!paymentRequired.accepts || paymentRequired.accepts.length === 0) {
+    throw new Error("No payment options available in 402 response");
+  }
+
+  const httpClient = await getHttpClient();
+  const paymentPayload = await httpClient.createPaymentPayload(paymentRequired);
+  const encodedPayment = httpClient.encodePaymentSignatureHeader(paymentPayload);
+  const paymentValue = typeof encodedPayment === "string"
+    ? encodedPayment
+    : (encodedPayment as Record<string, string>)["PAYMENT-SIGNATURE"] ?? Object.values(encodedPayment as Record<string, string>)[0];
+
+  const existingHeaders = init?.headers instanceof Headers
+    ? Object.fromEntries(init.headers.entries())
+    : (init?.headers as Record<string, string>) || {};
+
+  const paidResponse = await originalFetch(url, {
+    ...init,
+    headers: { ...existingHeaders, "x-payment": paymentValue },
+  });
+
+  if (paidResponse.status === 402) {
+    let errorMessage = "Payment rejected";
+    try {
+      const errorBody = (await paidResponse.json()) as { reason?: string; message?: string };
+      errorMessage = `Payment rejected: ${errorBody.reason || errorBody.message || "Unknown reason"}`;
+    } catch { /* use default */ }
+    throw new Error(errorMessage);
+  }
   return paidResponse;
 }
 

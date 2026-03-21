@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 import "dotenv/config";
+import { patchFetchForX402 } from "./x402-fetch-patch.js";
+
+// Patch global fetch BEFORE any WDK initialization — intercepts WDK's bundler calls
+patchFetchForX402();
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./tools/index.js";

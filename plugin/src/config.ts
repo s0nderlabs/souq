@@ -39,27 +39,22 @@ export function getSouqApiUrl(): string {
 
 export const WDK_WALLET_NAME = "sepolia";
 
-export function getPimlicoUrl(): string {
-  const apiKey = process.env.PIMLICO_API_KEY;
-  if (!apiKey || apiKey.trim().length === 0) {
-    throw new Error("PIMLICO_API_KEY environment variable is required");
-  }
-  return `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey.trim()}`;
+export function getBundlerUrl(): string {
+  return `${getSouqApiUrl()}/bundler`;
 }
 
 export function getWdkSepoliaConfig() {
-  // WDK connects to Pimlico DIRECTLY (not through backend proxy)
-  // Reason: WDK's Safe4337Pack needs Pimlico to support eth_getCode, eth_gasPrice etc.
-  // The backend proxy doesn't reliably forward all RPC methods WDK needs.
-  // Backend proxy is used for x402-gated routes (RPC, IPFS) — not for bundler.
-  const pimlicoUrl = getPimlicoUrl();
+  // ALL WDK traffic routes through our backend.
+  // /bundler has smart routing: standard RPC → Ankr, bundler methods → Pimlico.
+  // The global fetch patch (x402-fetch-patch.ts) adds x402 payment automatically.
+  const bundlerUrl = getBundlerUrl();
 
   return {
     chainId: SEPOLIA_CHAIN_ID,
     blockchain: "ethereum",
-    provider: getRpcUrl(), // Alchemy for standard RPC (getCode, gasPrice, etc.)
-    bundlerUrl: pimlicoUrl, // Pimlico for bundler operations
-    paymasterUrl: pimlicoUrl, // Pimlico for paymaster
+    provider: bundlerUrl,    // smart-routes to Ankr for reads, Pimlico for bundler
+    bundlerUrl: bundlerUrl,  // through our x402-paid backend proxy
+    paymasterUrl: bundlerUrl, // through our x402-paid backend proxy
     isSponsored: true,
     entryPointAddress: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
     safeModulesVersion: "0.3.0" as const,
@@ -69,11 +64,6 @@ export function getWdkSepoliaConfig() {
 // ── RPC ──
 
 export function getRpcUrl(): string {
-  // Prefer explicit RPC_URL env var for local dev / fallback
-  const rpc = process.env.RPC_URL;
-  if (rpc && rpc.trim().length > 0) return rpc.trim();
-
-  // Route through backend
   return `${getSouqApiUrl()}/rpc`;
 }
 

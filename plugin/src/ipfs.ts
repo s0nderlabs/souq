@@ -1,6 +1,7 @@
 import { keccak256, type Hex } from "viem";
 import { getSouqApiUrl } from "./config.js";
-import { x402Fetch } from "./x402-client.js";
+import { x402FetchRaw } from "./x402-client.js";
+import { originalFetch } from "./x402-fetch-patch.js";
 
 // ── Pin JSON to IPFS (via backend, x402-paid) ──
 
@@ -9,7 +10,7 @@ export async function pinJson(data: unknown): Promise<{ cid: string; hash: Hex }
   const jsonBytes = new TextEncoder().encode(jsonStr);
   const contentHash = keccak256(jsonBytes);
 
-  const response = await x402Fetch("/pin", {
+  const response = await x402FetchRaw("/pin", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: jsonStr,
@@ -33,7 +34,7 @@ export async function pinFile(
 ): Promise<{ cid: string; hash: Hex }> {
   const contentHash = keccak256(content);
 
-  const response = await x402Fetch("/pin", {
+  const response = await x402FetchRaw("/pin", {
     method: "POST",
     headers: {
       "Content-Type": "application/octet-stream",
@@ -63,13 +64,28 @@ export async function fetchFromIpfs(cid: string): Promise<Buffer> {
 
   const apiUrl = getSouqApiUrl();
 
-  // IPFS reads are free — no x402 payment needed
-  const response = await fetch(`${apiUrl}/ipfs/${cid}`);
-  if (!response.ok) {
+  // IPFS reads are free (no x402) — use originalFetch to avoid burning bootstrap calls.
+  // Retry with backoff for: gateway errors, propagation delay (empty response).
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const response = await originalFetch(`${apiUrl}/ipfs/${cid}`);
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      const buf = Buffer.from(arrayBuffer);
+      // Guard against IPFS propagation delay — gateway returns {} or empty before content replicates
+      if (buf.length <= 2) {
+        console.error(`[souq] IPFS propagation delay for ${cid} (attempt ${attempt + 1}/5)`);
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+      return buf;
+    }
+    if (response.status === 502 || response.status === 429) {
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+      continue;
+    }
     throw new Error(`IPFS fetch failed: ${response.status} ${response.statusText}`);
   }
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  throw new Error(`IPFS fetch failed after 5 attempts for ${cid}`);
 }
 
 // ── CID to bytes32 (commitment hash for on-chain storage) ──

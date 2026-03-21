@@ -77,6 +77,12 @@ export function getRoutePrice(path: string): PriceConfig | null {
  * 4. After successful response, settle payment in background
  */
 export const x402Middleware = createMiddleware<AppContext>(async (c, next) => {
+  // Skip if already verified (bootstrap free tier or deployment-exempt)
+  if (c.get("paymentVerified")) {
+    await next();
+    return;
+  }
+
   // Get pricing for this route
   const price = getRoutePrice(c.req.path);
   if (!price) {

@@ -16,6 +16,18 @@ export function getPimlicoUrl(apiKey: string): string {
   return `https://api.pimlico.io/v2/sepolia/rpc?apikey=${apiKey}`;
 }
 
-export function getIpfsGateway(cid: string): string {
+/**
+ * Returns the Pinata gateway URL for a CID.
+ * Uses dedicated gateway endpoint with JWT auth header.
+ */
+export function getPinataGatewayUrl(cid: string): string {
   return `https://gateway.pinata.cloud/ipfs/${cid}`;
+}
+
+/** Fallback public gateways (no auth needed). */
+export function getFallbackGateways(cid: string): string[] {
+  return [
+    `https://cloudflare-ipfs.com/ipfs/${cid}`,
+    `https://dweb.link/ipfs/${cid}`,
+  ];
 }

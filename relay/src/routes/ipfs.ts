@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppContext } from "../types";
-import { getIpfsGateway } from "../config";
+import { getPinataGatewayUrl, getFallbackGateways } from "../config";
 
 const ipfs = new Hono<AppContext>();
 
@@ -41,34 +41,61 @@ ipfs.post("/pin", async (c) => {
   }
 
   const result = (await pinataRes.json()) as { IpfsHash: string };
+
+  // Cache content in KV for instant retrieval (avoids IPFS gateway propagation delays)
+  await c.env.BOOTSTRAP_KV.put(`ipfs:${result.IpfsHash}`, JSON.stringify(json), {
+    expirationTtl: 86400 * 7, // 7 days
+  });
+
   return c.json({ cid: result.IpfsHash });
 });
 
 /**
+ * Fetch from an IPFS gateway, parse as JSON, validate non-empty.
+ * Returns null on any failure (HTTP error, empty response, parse error, network error).
+ */
+async function tryGateway(url: string): Promise<Record<string, unknown> | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const text = await response.text();
+    if (!text || text === "{}" || text.length <= 2) return null; // propagation delay
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * GET /ipfs/:cid
- * Proxies IPFS content retrieval through Pinata's gateway.
- * CID format is validated before proxying.
+ * Proxies IPFS content retrieval.
+ * 1. Try Pinata gateway with JWT auth (fastest — same infra as pin)
+ * 2. Fallback to public gateways on failure
  */
 ipfs.get("/ipfs/:cid", async (c) => {
   const cid = c.req.param("cid");
 
-  // Basic CID format validation (CIDv0 starts with Qm, CIDv1 starts with b)
   if (!/^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[a-z2-7]{58,})$/i.test(cid)) {
     return c.json({ error: "Invalid CID format" }, 400);
   }
 
-  const gatewayUrl = getIpfsGateway(cid);
-  const response = await fetch(gatewayUrl);
-
-  if (!response.ok) {
-    return c.json(
-      { error: "IPFS fetch failed", status: response.status },
-      response.status as 404
-    );
+  // Check KV cache first (content cached at pin time — instant, no gateway needed)
+  const cached = await c.env.BOOTSTRAP_KV.get(`ipfs:${cid}`);
+  if (cached) {
+    return c.json(JSON.parse(cached) as Record<string, unknown>);
   }
 
-  const data = await response.json();
-  return c.json(data as Record<string, unknown>);
+  // Fallback to IPFS gateways (for content pinned before KV caching was added)
+  const pinataUrl = getPinataGatewayUrl(cid);
+  const pinataResult = await tryGateway(pinataUrl);
+  if (pinataResult) return c.json(pinataResult);
+
+  for (const gatewayUrl of getFallbackGateways(cid)) {
+    const result = await tryGateway(gatewayUrl);
+    if (result) return c.json(result);
+  }
+
+  return c.json({ error: "IPFS content not available", cid }, 502);
 });
 
 export default ipfs;

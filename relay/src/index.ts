@@ -3,6 +3,8 @@ import { cors } from "hono/cors";
 import type { AppContext } from "./types";
 import { ROUTE_PRICING } from "./types";
 import { x402Middleware } from "./middleware/x402";
+import { bootstrapMiddleware } from "./middleware/bootstrap";
+import { deploymentExemptMiddleware } from "./middleware/deployment-exempt";
 import facilitatorRoutes from "./facilitator/routes";
 import rpcRoutes from "./routes/rpc";
 import bundlerRoutes from "./routes/bundler";
@@ -42,9 +44,16 @@ app.route("/", facilitatorRoutes);
 // Faucet (public, rate-limited by KV)
 app.route("/", faucetRoutes);
 
-// x402 payment middleware — agents pay per-call via signed EIP-3009 authorizations
-// Bundler is EXEMPT — WDK calls it internally and can't add custom headers
+// Payment middleware chain (order matters):
+// 1. Bootstrap — check free tier first (N free calls after faucet claim)
+// 2. Deployment-exempt — Safe deployment + read-only bundler calls always free
+// 3. x402 — handle payment via EIP-3009 TransferWithAuthorization
+app.use("/rpc", bootstrapMiddleware);
+app.use("/bundler", bootstrapMiddleware);
+app.use("/pin", bootstrapMiddleware);
+app.use("/bundler", deploymentExemptMiddleware);
 app.use("/rpc", x402Middleware);
+app.use("/bundler", x402Middleware);
 app.use("/pin", x402Middleware);
 
 app.route("/", rpcRoutes);

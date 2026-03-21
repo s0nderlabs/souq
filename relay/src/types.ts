@@ -44,4 +44,10 @@ export interface FaucetRecord {
   claimedAt: number;
 }
 
+export interface BootstrapRecord {
+  claimedAt: number;
+  callCount: number;
+}
+
+export const BOOTSTRAP_LIMIT = 50;
 export const FAUCET_AMOUNT = 100_000_000n; // 100 USDT0 (6 decimals)
