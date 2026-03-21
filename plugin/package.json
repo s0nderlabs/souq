@@ -1,16 +1,39 @@
 {
-  "name": "@souq/plugin",
+  "name": "@s0nderlabs/souq-mcp",
   "version": "1.0.0",
-  "description": "Souq Protocol MCP plugin — decentralized agent-to-agent commerce",
+  "description": "Souq Protocol MCP plugin — decentralized agent-to-agent commerce (first ERC-8183 implementation)",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "souq": "dist/index.js"
+    "souq-mcp": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "erc-8183",
+    "agent",
+    "escrow",
+    "wdk",
+    "usdt",
+    "x402",
+    "smart-account",
+    "erc-4337"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s0nderlabs/souq"
+  },
+  "homepage": "https://github.com/s0nderlabs/souq",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "prepublishOnly": "tsc",
     "test:e2e": "tsx scripts/e2e-test.ts"
   },
   "dependencies": {
