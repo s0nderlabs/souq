@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { encodeFunctionData, type Hex } from "viem";
+import { encodeFunctionData } from "viem";
 import { bytesToHex } from "viem";
 import { getAddress, sendTx, getPublicClient, waitForUserOp } from "../protocol.js";
 import { IDENTITY_REGISTRY, explorerTxUrl, getSeedPhrase } from "../config.js";
@@ -26,8 +26,8 @@ interface RegisterIdentityResult {
     name: string;
     wallet: string;
     encryptionPublicKey: string;
-    ipfsCid: string;
-    ipfsUri: string;
+    ipfsCid?: string;
+    ipfsUri?: string;
   };
   error?: string;
 }
@@ -35,7 +35,7 @@ interface RegisterIdentityResult {
 export function registerRegisterIdentity(server: McpServer): void {
   server.tool(
     "register_identity",
-    "Register an ERC-8004 agent identity. Uploads agent-card to IPFS.",
+    "Register an ERC-8004 agent identity. Uploads agent-card to IPFS. Returns existing identity if already registered.",
     Schema.shape,
     async (params) => {
       const result = await handler(params as z.infer<typeof Schema>);
@@ -49,11 +49,40 @@ export function registerRegisterIdentity(server: McpServer): void {
 async function handler(params: z.infer<typeof Schema>): Promise<RegisterIdentityResult> {
   try {
     const address = await getAddress();
+    const publicClient = getPublicClient();
 
     // Derive encryption keypair from seed
     const seed = getSeedPhrase();
     const keypair = deriveKeypairFromSeed(seed);
     const encryptionPublicKey = bytesToHex(keypair.publicKey);
+
+    // Check if already registered (one identity per wallet)
+    const balance = await publicClient.readContract({
+      address: IDENTITY_REGISTRY,
+      abi: identityAbi,
+      functionName: "balanceOf",
+      args: [address],
+    }) as bigint;
+
+    if (balance > 0n) {
+      const agentId = await publicClient.readContract({
+        address: IDENTITY_REGISTRY,
+        abi: identityAbi,
+        functionName: "tokenOfOwnerByIndex",
+        args: [address, 0n],
+      }) as bigint;
+
+      return {
+        success: true,
+        message: `Identity already registered: agentId=${agentId}`,
+        identity: {
+          agentId: agentId.toString(),
+          name: params.name,
+          wallet: address,
+          encryptionPublicKey,
+        },
+      };
+    }
 
     // Parse capabilities
     const capabilities = params.capabilities
@@ -83,23 +112,17 @@ async function handler(params: z.infer<typeof Schema>): Promise<RegisterIdentity
     });
 
     const { hash } = await sendTx(IDENTITY_REGISTRY, data);
-
-    // Wait for receipt and parse agentId from return value
-    const publicClient = getPublicClient();
     const { receipt } = await waitForUserOp(hash);
-    const txReceipt = receipt as { logs: Array<{ address: string; topics: string[]; data: string }> };
 
-    // Try to extract agentId from Transfer event (ERC-721 mint)
-    // Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
+    // Parse agentId from Transfer event (ERC-721 mint)
     let agentId = "unknown";
     const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-    for (const log of txReceipt.logs) {
+    for (const log of receipt.logs) {
       if (
         log.address.toLowerCase() === IDENTITY_REGISTRY.toLowerCase() &&
         log.topics[0] === TRANSFER_TOPIC &&
         log.topics.length >= 4
       ) {
-        // tokenId is the 3rd indexed param (topics[3])
         agentId = BigInt(log.topics[3] as string).toString();
         break;
       }

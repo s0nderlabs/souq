@@ -4,21 +4,35 @@ import { getAddress } from "../protocol.js";
 import { getSouqApiUrl } from "../config.js";
 
 const Schema = z.object({
-  prompt: z
+  name: z
+    .string()
+    .max(100)
+    .describe("Policy name, e.g. 'Agent Activity Policy'"),
+  description: z
+    .string()
+    .max(500)
+    .describe("Brief description of the compliance requirement"),
+  rules: z
     .string()
     .describe(
-      "Natural language description of the compliance policy to create. " +
-      "Example: 'Create a policy requiring agents to have on-chain transaction history and valid metadata'"
+      "Natural language rules for the Scribe AI to interpret. " +
+      "Example: 'Agents must have at least one on-chain transaction and a registered ERC-8004 identity'"
     ),
+  visibility: z
+    .enum(["public", "private"])
+    .default("public")
+    .describe("Policy visibility. Default public."),
 });
 
 interface CreatePolicyResult {
   success: boolean;
   message: string;
   policy?: {
-    policyId?: string;
-    scribeResponse: string;
-    sessionId?: string;
+    policyId: string;
+    name: string;
+    description: string;
+    rules: unknown;
+    visibility: string;
   };
   error?: string;
 }
@@ -26,7 +40,7 @@ interface CreatePolicyResult {
 export function registerCreatePolicy(server: McpServer): void {
   server.tool(
     "create_policy",
-    "Create a Sigil compliance policy via the Scribe AI. Defines rules that agents must pass to participate in hooked jobs.",
+    "Create a Sigil compliance policy. Defines rules that agents must pass to participate in hooked jobs.",
     Schema.shape,
     async (params) => {
       const result = await handler(params as z.infer<typeof Schema>);
@@ -42,81 +56,47 @@ async function handler(params: z.infer<typeof Schema>): Promise<CreatePolicyResu
     const walletAddress = await getAddress();
     const apiUrl = getSouqApiUrl();
 
-    // Sigil calls go through our relay — relay injects API key auth
     const response = await fetch(`${apiUrl}/sigil/inscribe`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-SOUQ-WALLET": walletAddress,
       },
-      body: JSON.stringify({ prompt: params.prompt }),
+      body: JSON.stringify({
+        name: params.name,
+        description: params.description,
+        rules: params.rules,
+        visibility: params.visibility,
+      }),
     });
 
-    if (!response.ok && !response.headers.get("content-type")?.includes("text/event-stream")) {
-      const error = (await response.text());
+    const data = await response.json() as {
+      success: boolean;
+      policyId?: string;
+      name?: string;
+      description?: string;
+      rules?: unknown;
+      visibility?: string;
+      error?: string;
+    };
+
+    if (!data.success) {
       return {
         success: false,
-        message: "Failed to start policy creation",
-        error,
+        message: "Policy creation failed",
+        error: data.error || "Unknown error",
       };
-    }
-
-    // Consume SSE stream
-    const reader = response.body?.getReader();
-    if (!reader) {
-      return { success: false, message: "No response stream", error: "Empty body" };
-    }
-
-    const decoder = new TextDecoder();
-    let fullText = "";
-    let sessionId: string | undefined;
-    let doneResult: string | undefined;
-
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.startsWith("event: ")) {
-          const eventType = line.slice(7).trim();
-          // Next data line will contain the payload — handled below
-          continue;
-        }
-        if (line.startsWith("data: ")) {
-          const dataStr = line.slice(6);
-          try {
-            const data = JSON.parse(dataStr) as Record<string, unknown>;
-            if (data.sessionId) sessionId = data.sessionId as string;
-            if (data.text) fullText += data.text as string;
-            if (data.result) doneResult = data.result as string;
-          } catch {
-            // Non-JSON data line, skip
-          }
-        }
-      }
-    }
-
-    // Extract policyId from the done result if present
-    let policyId: string | undefined;
-    if (doneResult) {
-      const match = doneResult.match(/0x[a-fA-F0-9]{64}/);
-      if (match) policyId = match[0];
     }
 
     return {
       success: true,
-      message: policyId
-        ? `Policy created: ${policyId}`
-        : "Policy creation completed. Check Sigil dashboard for details.",
+      message: `Policy created: ${data.policyId}`,
       policy: {
-        policyId,
-        scribeResponse: doneResult || fullText,
-        sessionId,
+        policyId: data.policyId || "unknown",
+        name: data.name || params.name,
+        description: data.description || params.description,
+        rules: data.rules,
+        visibility: data.visibility || params.visibility,
       },
     };
   } catch (error) {

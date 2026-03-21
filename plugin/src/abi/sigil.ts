@@ -28,4 +28,25 @@ export const sigilAbi = [
     ],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "getComplianceStatus",
+    inputs: [
+      { name: "wallet", type: "address" },
+      { name: "policyId", type: "bytes32" },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "compliant", type: "bool" },
+          { name: "score", type: "uint8" },
+          { name: "expiresAt", type: "uint256" },
+          { name: "lastUpdate", type: "uint256" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
 ] as const;

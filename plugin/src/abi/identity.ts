@@ -1,4 +1,12 @@
 export const identityAbi = [
+  // ERC-721 standard
+  {
+    type: "function",
+    name: "balanceOf",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
   {
     type: "function",
     name: "ownerOf",
@@ -6,8 +14,18 @@ export const identityAbi = [
     outputs: [{ name: "", type: "address" }],
     stateMutability: "view",
   },
-  // register function — signature to be verified from on-chain ABI
-  // ERC-8004 standard: register(string agentURI) returns (uint256 agentId)
+  // ERC-721 Enumerable
+  {
+    type: "function",
+    name: "tokenOfOwnerByIndex",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "index", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  // ERC-8004 register
   {
     type: "function",
     name: "register",

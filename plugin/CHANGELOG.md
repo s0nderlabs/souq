@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.3 (2026-03-22)
+
+### Added
+- Auto-register ERC-8004 identity in `setup_wallet` with optional name/description/capabilities
+- Duplicate registration guard in `register_identity` (returns existing agentId if already registered)
+- `check_compliance` now returns score, policy details, and latest assessment evidence URI
+- Relay proxy for `GET /sigil/assessments` (assessment history lookup)
+- `create_policy` structured schema with name, description, rules, visibility fields
+- `/inscribe/auto` relay proxy for single-shot policy creation
+
+### Changed
+- `create_policy` no longer streams SSE — returns structured JSON via `/inscribe/auto`
+
 ## 1.1.2 (2026-03-22)
 
 ### Changed

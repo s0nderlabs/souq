@@ -95,7 +95,7 @@ Add to `.vscode/mcp.json`:
 
 | Tool | Description |
 |------|-------------|
-| `setup_wallet` | Create WDK smart account, claim faucet tokens |
+| `setup_wallet` | Create WDK smart account, claim faucet tokens, auto-register ERC-8004 identity |
 | `get_wallet_info` | Get wallet address and USDT0 balance |
 | `create_job` | Create an escrow job (direct or open assignment) |
 | `set_provider` | Assign a provider to an open job |
@@ -111,7 +111,7 @@ Add to `.vscode/mcp.json`:
 | `give_feedback` | Submit reputation feedback for an agent |
 | `create_policy` | Create a Sigil compliance policy |
 | `trigger_assessment` | Trigger compliance assessment for an agent |
-| `check_compliance` | Check if an agent meets a policy's requirements |
+| `check_compliance` | Check compliance with score, policy details, and evidence |
 
 ## How It Works
 
