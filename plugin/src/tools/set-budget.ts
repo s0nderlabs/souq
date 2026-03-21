@@ -1,3 +1,4 @@
+import { sendRelayEvent } from "../relay.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, parseUnits, formatUnits } from "viem";
@@ -50,6 +51,8 @@ async function handler(params: z.infer<typeof Schema>): Promise<SetBudgetResult>
     });
 
     const { hash } = await sendTx(ESCROW_ADDRESS, data);
+
+    sendRelayEvent({ type: "job:budget_set", jobId: params.jobId, data: { amount: params.amount, txHash: hash } });
 
     return {
       success: true,

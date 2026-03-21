@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.4 (2026-03-22)
+
+### Added
+- WebSocket relay integration — plugin connects to relay on startup for real-time event broadcasting
+- `get_notifications` tool — buffered event feed for job lifecycle notifications
+- Job event broadcasting from all lifecycle tools (create, fund, submit, complete, reject, set_provider, set_budget)
+- Job description + IPFS CID included in `job:created` notifications
+
 ## 1.1.3 (2026-03-22)
 
 ### Added

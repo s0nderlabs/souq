@@ -1,3 +1,4 @@
+import { sendRelayEvent } from "../relay.js";
 // Complete Job — Evaluator approves work, re-encrypts deliverable for client, releases payment
 // Copyright (c) 2026 s0nderlabs
 
@@ -204,6 +205,8 @@ async function completeJobHandler(
     const platformFee = (budget * platformFeeBP) / BPS_DENOMINATOR;
     const evaluatorFee = (budget * evaluatorFeeBP) / BPS_DENOMINATOR;
     const providerPayout = budget - platformFee - evaluatorFee;
+
+    sendRelayEvent({ type: "job:completed", jobId: params.jobId, data: { txHash: txResult.hash, providerPayout: formatUnits(providerPayout, USDT_DECIMALS) } });
 
     return {
       success: true,

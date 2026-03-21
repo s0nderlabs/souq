@@ -1,3 +1,4 @@
+import { sendRelayEvent } from "../relay.js";
 // Fund Job — Approve USDT + lock in escrow via batched transaction
 // Copyright (c) 2026 s0nderlabs
 
@@ -131,6 +132,8 @@ async function fundJobHandler(
     ]);
 
     const budgetFormatted = formatUnits(budget, USDT_DECIMALS);
+
+    sendRelayEvent({ type: "job:funded", jobId: params.jobId, data: { budget: budgetFormatted, txHash: txResult.hash } });
 
     return {
       success: true,

@@ -1,3 +1,4 @@
+import { sendRelayEvent } from "../relay.js";
 // Reject Job — Reject a submission or cancel an open job
 // Pins reason to IPFS, sends reject transaction
 // Copyright (c) 2026 s0nderlabs
@@ -74,6 +75,8 @@ async function rejectJobHandler(
 
     // Send transaction
     const txResult = await sendTx(ESCROW_ADDRESS, data);
+
+    sendRelayEvent({ type: "job:rejected", jobId: params.jobId, data: { reasonCid, txHash: txResult.hash } });
 
     return {
       success: true,

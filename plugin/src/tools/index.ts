@@ -16,6 +16,7 @@ import { registerGiveFeedback } from "./give-feedback.js";
 import { registerCreatePolicy } from "./create-policy.js";
 import { registerTriggerAssessment } from "./trigger-assessment.js";
 import { registerCheckCompliance } from "./check-compliance.js";
+import { registerGetNotifications } from "./get-notifications.js";
 
 export function registerTools(server: McpServer): void {
   // Wallet
@@ -44,4 +45,7 @@ export function registerTools(server: McpServer): void {
   registerCreatePolicy(server);
   registerTriggerAssessment(server);
   registerCheckCompliance(server);
+
+  // Notifications
+  registerGetNotifications(server);
 }

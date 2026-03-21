@@ -1,3 +1,4 @@
+import { sendRelayEvent } from "../relay.js";
 // Submit Work — Encrypt deliverable for evaluator, pin to IPFS, submit on-chain
 // Copyright (c) 2026 s0nderlabs
 
@@ -126,6 +127,8 @@ async function submitWorkHandler(
 
     // Send transaction
     const txResult = await sendTx(ESCROW_ADDRESS, data);
+
+    sendRelayEvent({ type: "job:submitted", jobId: params.jobId, data: { deliverableCid, txHash: txResult.hash } });
 
     return {
       success: true,

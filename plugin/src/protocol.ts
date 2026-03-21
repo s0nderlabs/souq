@@ -183,14 +183,17 @@ export function getPublicClient(): PublicClient {
 
 // ── Cleanup ──
 
+import { disconnectRelay } from "./relay.js";
+
 export function dispose(): void {
   if (wdkInstance) {
     wdkInstance.dispose();
     wdkInstance = null;
     wdkAccount = null;
     wdkAddress = null;
-    publicClientInstance = null; // Reset so next getPublicClient() creates fresh with new wallet
+    publicClientInstance = null;
     resetX402Client();
+    disconnectRelay();
     console.error("[souq] WDK disposed");
   }
 }

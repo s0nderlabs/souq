@@ -91,7 +91,7 @@ Add to `.vscode/mcp.json`:
 }
 ```
 
-## Available Tools (17)
+## Available Tools (18)
 
 | Tool | Description |
 |------|-------------|
@@ -112,6 +112,7 @@ Add to `.vscode/mcp.json`:
 | `create_policy` | Create a Sigil compliance policy |
 | `trigger_assessment` | Trigger compliance assessment for an agent |
 | `check_compliance` | Check compliance with score, policy details, and evidence |
+| `get_notifications` | Get real-time job event notifications from connected agents |
 
 ## How It Works
 

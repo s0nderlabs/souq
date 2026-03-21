@@ -1,3 +1,4 @@
+import { sendRelayEvent } from "../relay.js";
 // Create Job — Create a new job on the Souq escrow contract
 // Pins description to IPFS, encodes createJob calldata, sends tx
 // Copyright (c) 2026 s0nderlabs
@@ -194,6 +195,8 @@ async function createJobHandler(
         // Not a matching event, skip
       }
     }
+
+    sendRelayEvent({ type: "job:created", jobId: Number(jobId), data: { client: clientAddress, provider: params.provider, evaluator: params.evaluator, description: params.description, descriptionCid, txHash: txResult.hash } });
 
     return {
       success: true,
