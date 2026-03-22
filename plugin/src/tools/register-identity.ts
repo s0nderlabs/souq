@@ -3,7 +3,7 @@ import { z } from "zod";
 import { encodeFunctionData } from "viem";
 import { bytesToHex } from "viem";
 import { getAddress, sendTx, getPublicClient, waitForUserOp } from "../protocol.js";
-import { IDENTITY_REGISTRY, explorerTxUrl, getSeedPhrase } from "../config.js";
+import { IDENTITY_REGISTRY, explorerTxUrl, getSeedPhrase, getCachedAgentId, cacheAgentId } from "../config.js";
 import { identityAbi } from "../abi/identity.js";
 import { pinJson, toIpfsUri } from "../ipfs.js";
 import { deriveKeypairFromSeed } from "../encryption.js";
@@ -56,7 +56,17 @@ async function handler(params: z.infer<typeof Schema>): Promise<RegisterIdentity
     const keypair = deriveKeypairFromSeed(seed);
     const encryptionPublicKey = bytesToHex(keypair.publicKey);
 
-    // Check if already registered (one identity per wallet)
+    // Check cache first
+    const cachedId = getCachedAgentId();
+    if (cachedId) {
+      return {
+        success: true,
+        message: `Identity already registered: agentId=${cachedId}`,
+        identity: { agentId: cachedId, name: params.name, wallet: address, encryptionPublicKey },
+      };
+    }
+
+    // Check on-chain
     const balance = await publicClient.readContract({
       address: IDENTITY_REGISTRY,
       abi: identityAbi,
@@ -127,6 +137,8 @@ async function handler(params: z.infer<typeof Schema>): Promise<RegisterIdentity
         break;
       }
     }
+
+    if (agentId !== "unknown") cacheAgentId(agentId);
 
     return {
       success: true,

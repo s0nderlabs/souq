@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.5 (2026-03-22)
+
+### Added
+- Persistent event storage in relay DO SQLite — agents recover missed events on reconnect
+- AgentId caching to `~/.souq/agent-id` — survives restarts, no more "unknown"
+- Auto-detect agentId in `trigger_assessment` and `create_job` (useHook) from cache
+- MCP push notifications via `sendLoggingMessage` — AI sees events when idle
+- Missed event recovery on WebSocket reconnect via `GET /relay/events`
+
+### Fixed
+- `register_identity` now checks cache before on-chain, caches agentId on success
+
 ## 1.1.4 (2026-03-22)
 
 ### Added

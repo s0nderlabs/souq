@@ -1,10 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getWdkAccount, getAddress } from "../protocol.js";
-import { getSouqApiUrl } from "../config.js";
+import { getSouqApiUrl, getCachedAgentId } from "../config.js";
 
 const Schema = z.object({
-  agentId: z.number().describe("Your ERC-8004 agent token ID"),
+  agentId: z.number().optional().describe("Your ERC-8004 agent token ID. Auto-detected from cache if omitted."),
   policyId: z.string().describe("The policy ID (bytes32 hex) to assess against"),
 });
 
@@ -39,7 +39,18 @@ export function registerTriggerAssessment(server: McpServer): void {
 async function handler(params: z.infer<typeof Schema>): Promise<TriggerAssessmentResult> {
   try {
     const account = await getWdkAccount();
-    const agentId = params.agentId.toString();
+
+    // Auto-detect agentId from cache if not provided
+    let agentId: string;
+    if (params.agentId) {
+      agentId = params.agentId.toString();
+    } else {
+      const cached = getCachedAgentId();
+      if (!cached) {
+        return { success: false, message: "No agentId provided and none cached. Call setup_wallet first to register your identity." };
+      }
+      agentId = cached;
+    }
     const policyId = params.policyId;
 
     // Build the message: sigil:assess:{agentId}:{policyId}:{timestamp}

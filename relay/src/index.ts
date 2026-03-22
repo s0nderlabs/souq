@@ -62,11 +62,12 @@ app.route("/", bundlerRoutes);
 app.route("/", ipfsRoutes);
 app.route("/", sigilRoutes);
 
-// WebSocket relay
+// WebSocket relay + event history
 app.get("/relay", async (c) => {
-  if (c.req.header("Upgrade") !== "websocket") {
-    return c.json({ error: "Expected WebSocket" }, 426);
-  }
+  const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
+  return stub.fetch(c.req.raw);
+});
+app.get("/relay/events", async (c) => {
   const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
   return stub.fetch(c.req.raw);
 });

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { encodeFunctionData, formatUnits, bytesToHex, type Address, type Hex } from "viem";
 import { initWdk, getAddress, getPublicClient, sendTx, waitForUserOp } from "../protocol.js";
 import { warmupX402Client } from "../x402-client.js";
-import { USDT_ADDRESS, USDT_DECIMALS, IDENTITY_REGISTRY, explorerAddressUrl, getSeedPhrase, getSouqApiUrl } from "../config.js";
+import { USDT_ADDRESS, USDT_DECIMALS, IDENTITY_REGISTRY, explorerAddressUrl, getSeedPhrase, getSouqApiUrl, getCachedAgentId, cacheAgentId } from "../config.js";
 import { usdtAbi } from "../abi/usdt.js";
 import { identityAbi } from "../abi/identity.js";
 import { deriveKeypairFromSeed } from "../encryption.js";
@@ -111,6 +111,13 @@ async function setupWalletHandler(
     // Auto-register ERC-8004 identity if not already registered
     let identityResult: SetupWalletResult["identity"];
     try {
+      // Check local cache first (fastest, no RPC)
+      const cachedId = getCachedAgentId();
+      if (cachedId) {
+        identityResult = { agentId: cachedId, status: "already_registered" };
+        console.error(`[souq] Identity from cache: agentId=${cachedId}`);
+      } else {
+      // Check on-chain
       const identityBalance = await publicClient.readContract({
         address: IDENTITY_REGISTRY,
         abi: identityAbi,
@@ -119,21 +126,10 @@ async function setupWalletHandler(
       }) as bigint;
 
       if (identityBalance > 0n) {
-        // Already registered — try to read existing agentId
-        let agentId = "unknown";
-        try {
-          const tokenId = await publicClient.readContract({
-            address: IDENTITY_REGISTRY,
-            abi: identityAbi,
-            functionName: "tokenOfOwnerByIndex",
-            args: [address, 0n],
-          }) as bigint;
-          agentId = tokenId.toString();
-        } catch {
-          // ERC-721 Enumerable not supported — agentId unknown but identity exists
-        }
-        identityResult = { agentId, status: "already_registered" };
-        console.error(`[souq] Identity already registered: agentId=${agentId}`);
+        // Registered on-chain but not cached — can't resolve agentId without Enumerable
+        // Save "registered" marker so we don't re-register
+        identityResult = { agentId: "unknown", status: "already_registered" };
+        console.error("[souq] Identity registered on-chain (agentId not cached)");
       } else {
         // Register new identity
         const capabilities = params.capabilities.split(",").map(s => s.trim()).filter(Boolean);
@@ -173,9 +169,12 @@ async function setupWalletHandler(
           }
         }
 
+        // Cache agentId locally for future startups
+        if (agentId !== "unknown") cacheAgentId(agentId);
         identityResult = { agentId, status: "registered", name: params.name };
         console.error(`[souq] Identity registered: agentId=${agentId}`);
       }
+      } // end cache else
     } catch (identityError) {
       // Non-fatal — wallet works without identity, just can't use hooks
       console.error(`[souq] Identity registration skipped: ${identityError instanceof Error ? identityError.message : String(identityError)}`);

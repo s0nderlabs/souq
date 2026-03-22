@@ -63,6 +63,28 @@ export function getRpcUrl(): string {
 
 const SOUQ_SEED_DIR = join(homedir(), ".souq");
 const SOUQ_SEED_PATH = join(SOUQ_SEED_DIR, "seed");
+const SOUQ_AGENT_ID_PATH = join(SOUQ_SEED_DIR, "agent-id");
+
+// ── Agent ID Persistence ──
+
+export function getCachedAgentId(): string | null {
+  try {
+    if (existsSync(SOUQ_AGENT_ID_PATH)) {
+      const id = readFileSync(SOUQ_AGENT_ID_PATH, "utf-8").trim();
+      if (id.length > 0) return id;
+    }
+  } catch { /* skip */ }
+  return null;
+}
+
+export function cacheAgentId(agentId: string): void {
+  try {
+    if (!existsSync(SOUQ_SEED_DIR)) {
+      mkdirSync(SOUQ_SEED_DIR, { mode: 0o700, recursive: true });
+    }
+    writeFileSync(SOUQ_AGENT_ID_PATH, agentId, { mode: 0o600 });
+  } catch { /* skip */ }
+}
 
 export function getSeedPhrase(): string {
   // 1. Check WDK_SEED env var

@@ -14,7 +14,7 @@ import {
   type Hex,
 } from "viem";
 import { getAddress, sendTx, getPublicClient, waitForUserOp } from "../protocol.js";
-import { ESCROW_ADDRESS, HOOK_ADDRESS, explorerTxUrl } from "../config.js";
+import { ESCROW_ADDRESS, HOOK_ADDRESS, explorerTxUrl, getCachedAgentId } from "../config.js";
 import { escrowAbi } from "../abi/escrow.js";
 import { pinJson, cidToBytes32, toIpfsUri } from "../ipfs.js";
 
@@ -134,6 +134,9 @@ async function createJobHandler(
     // Encode optParams for the hook (if enabled)
     let optParams: Hex = "0x";
     if (params.useHook) {
+      // Auto-populate clientAgentId from cache if not provided
+      const clientAgentId = params.clientAgentId || Number(getCachedAgentId() || "0");
+
       // SigilGateHook.afterCreateJob expects:
       // abi.encode(clientAgentId, providerAgentId, evaluatorAgentId, providerPolicies[], evaluatorPolicies[])
       optParams = encodeAbiParameters(
@@ -145,7 +148,7 @@ async function createJobHandler(
           { type: "bytes32[]" },
         ],
         [
-          BigInt(params.clientAgentId),
+          BigInt(clientAgentId),
           BigInt(params.providerAgentId),
           BigInt(params.evaluatorAgentId),
           (params.providerPolicies as string[]).map((p) => p as Hex),

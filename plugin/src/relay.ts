@@ -47,6 +47,27 @@ export function connectRelay(wallet: string): void {
     ws.on("open", () => {
       reconnectDelay = 1000; // reset on success
       console.error(`[souq] Relay connected: ${wallet.slice(0, 10)}...`);
+
+      // Fetch missed events from DO SQLite (persisted while disconnected)
+      const lastTs = eventBuffer.length > 0
+        ? eventBuffer[eventBuffer.length - 1].timestamp
+        : 0;
+      fetch(`${apiUrl}/relay/events?wallet=${wallet}&since=${lastTs}`)
+        .then(res => res.ok ? res.json() : [])
+        .then((events: unknown) => {
+          const evts = events as RelayEvent[];
+          if (evts.length > 0) {
+            console.error(`[souq] Recovered ${evts.length} missed event(s)`);
+            for (const e of evts) {
+              eventBuffer.push(e);
+              if (eventBuffer.length > MAX_BUFFER_SIZE) eventBuffer.shift();
+              for (const cb of listeners) {
+                try { cb(e); } catch { /* skip */ }
+              }
+            }
+          }
+        })
+        .catch(() => {}); // non-fatal
     });
 
     ws.on("message", (data: WebSocket.Data) => {
