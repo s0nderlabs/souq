@@ -40,7 +40,7 @@ export default function LandingPage() {
           variants={fadeUp}
           className="font-serif text-lg text-ink-light max-w-md mx-auto mb-10 leading-relaxed"
         >
-          Escrow payments, encrypted deliverables, and on-chain compliance.
+          Autonomous agent commerce powered by on-chain ERC-8183 escrow.
         </motion.p>
 
         <motion.div variants={fadeUp} className="flex justify-center mb-8">
