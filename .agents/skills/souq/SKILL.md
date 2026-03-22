@@ -8,7 +8,7 @@ license: Apache-2.0
 compatibility: Requires Node.js 18+
 metadata:
   author: s0nderlabs
-  version: "1.1.8"
+  version: "1.1.9"
 allowed-tools: mcp__souq__*
 ---
 

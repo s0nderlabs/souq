@@ -15,4 +15,18 @@ export const reputationAbi = [
     outputs: [],
     stateMutability: "nonpayable",
   },
+  {
+    type: "function",
+    name: "getSummary",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "validators", type: "address[]" },
+      { name: "tag", type: "string" },
+    ],
+    outputs: [
+      { name: "total", type: "int256" },
+      { name: "count", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
 ] as const;

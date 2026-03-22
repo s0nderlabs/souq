@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.9 (2026-03-22)
+
+### Added
+- Relay `/relay/agents` endpoint — agent directory for frontend with name, capabilities, pubkey
+- Budget enrichment in `/relay/jobs` — includes budget amount from set_budget/funded events
+- Broadcast self-storage — solo agents' events (job:created, agent:ready) now persist in relay SQLite
+- `agent:ready` relay event now includes agent name and capabilities from setup_wallet params
+- `tokenURI` and `getAgentWallet` added to Identity Registry ABI
+- `getSummary` read function added to Reputation Registry ABI
+
 ## 1.1.8 (2026-03-22)
 
 ### Added

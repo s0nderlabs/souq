@@ -205,7 +205,7 @@ async function setupWalletHandler(
     }
 
     // Broadcast agent:ready with pubkey so other agents can discover it
-    sendRelayEvent({ type: "agent:ready", data: { address, encryptionPublicKey, agentId: identityResult?.agentId } });
+    sendRelayEvent({ type: "agent:ready", data: { address, encryptionPublicKey, agentId: identityResult?.agentId, name: params.name, capabilities: params.capabilities } });
 
     return {
       success: true,

@@ -94,6 +94,28 @@ export class SouqRelay extends DurableObject<Env> {
         }
       }
 
+      // Batch-fetch budget for all jobs
+      const budgetMap = new Map<number, string>();
+      if (jobIds.length > 0) {
+        const budgetRows = this.ctx.storage.sql
+          .exec(
+            `SELECT job_id, type, payload FROM events
+             WHERE job_id IN (${jobIds.map(() => "?").join(",")})
+             AND type IN ('job:budget_set','job:funded')
+             ORDER BY ts DESC`,
+            ...jobIds
+          )
+          .toArray();
+        for (const br of budgetRows) {
+          const jid = br.job_id as number;
+          if (!budgetMap.has(jid)) {
+            const bp = JSON.parse(br.payload as string) as Record<string, unknown>;
+            const bd = (bp.data || {}) as Record<string, string>;
+            budgetMap.set(jid, bd.budget || bd.amount || "0");
+          }
+        }
+      }
+
       const jobs = rows.map((row: Record<string, unknown>) => {
         const payload = JSON.parse(row.payload as string) as Record<string, unknown>;
         const data = (payload.data || {}) as Record<string, unknown>;
@@ -104,6 +126,7 @@ export class SouqRelay extends DurableObject<Env> {
           client: data.client || null,
           provider: data.provider || null,
           evaluator: data.evaluator || null,
+          budget: budgetMap.get(row.job_id as number) || null,
           status: statusMap.get(row.job_id as number) || "open",
           createdAt: row.ts,
         };
@@ -169,6 +192,32 @@ export class SouqRelay extends DurableObject<Env> {
       return Response.json({ bids });
     }
 
+    // HTTP endpoint for listing registered agents (from agent:ready events)
+    if (url.pathname === "/relay/agents") {
+      const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || 50), 200));
+      const rows = this.ctx.storage.sql
+        .exec(
+          "SELECT payload, MAX(ts) as ts FROM events WHERE type = 'agent:ready' GROUP BY json_extract(payload, '$.data.address') ORDER BY ts DESC LIMIT ?",
+          limit
+        )
+        .toArray();
+
+      const agents = rows.map((row: Record<string, unknown>) => {
+        const payload = JSON.parse(row.payload as string) as Record<string, unknown>;
+        const data = (payload.data || {}) as Record<string, unknown>;
+        return {
+          address: data.address || payload.from,
+          encryptionPublicKey: data.encryptionPublicKey || null,
+          agentId: data.agentId || null,
+          name: data.name || null,
+          capabilities: data.capabilities || null,
+          lastSeen: row.ts,
+        };
+      });
+
+      return Response.json({ agents });
+    }
+
     // WebSocket upgrade
     if (request.headers.get("Upgrade") !== "websocket") {
       return Response.json({ error: "Expected WebSocket" }, { status: 426 });
@@ -216,12 +265,16 @@ export class SouqRelay extends DurableObject<Env> {
         for (const conn of this.ctx.getWebSockets()) {
           if (conn !== ws) {
             conn.send(message);
-            // Get recipient wallet tag and persist
             const tags = conn.deserializeAttachment?.() as string[] | null;
             if (tags?.[0]) {
               this.storeEvent(tags[0], data, message);
             }
           }
+        }
+        // Also store for sender so solo agents' events appear in /relay/jobs and /relay/agents
+        const senderTags = ws.deserializeAttachment?.() as string[] | null;
+        if (senderTags?.[0]) {
+          this.storeEvent(senderTags[0], data, message);
         }
       }
 

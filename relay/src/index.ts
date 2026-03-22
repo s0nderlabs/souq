@@ -85,6 +85,10 @@ app.get("/relay/bids", async (c) => {
   const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
   return stub.fetch(c.req.raw);
 });
+app.get("/relay/agents", async (c) => {
+  const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
+  return stub.fetch(c.req.raw);
+});
 
 export default { fetch: app.fetch };
 export { SouqRelay } from "./relay/ws";
