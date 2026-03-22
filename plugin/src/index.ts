@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./tools/index.js";
 import { initWdk, getAddress } from "./protocol.js";
-import { connectRelay, onRelayEvent } from "./relay.js";
+import { connectRelay, onRelayEvent, sendRelayEvent } from "./relay.js";
 
 // Declare logging capability so we can push notifications to the AI agent
 export const server = new McpServer(
@@ -36,10 +36,18 @@ async function main() {
     }).catch(() => {}); // non-fatal if transport disconnected
   });
 
-  // Connect to relay in background (non-blocking, non-fatal)
+  // Connect to relay in background and broadcast pubkey (non-blocking, non-fatal)
   initWdk()
-    .then(() => getAddress())
-    .then((addr) => connectRelay(addr))
+    .then(async () => {
+      const addr = await getAddress();
+      connectRelay(addr);
+      // Broadcast pubkey so other agents can auto-discover it
+      const { getSeedPhrase } = await import("./config.js");
+      const { deriveKeypairFromSeed } = await import("./encryption.js");
+      const { bytesToHex } = await import("viem");
+      const keypair = deriveKeypairFromSeed(getSeedPhrase());
+      sendRelayEvent({ type: "agent:ready", data: { address: addr, encryptionPublicKey: bytesToHex(keypair.publicKey) } });
+    })
     .catch(() => console.error("[souq] Relay connection deferred (wallet not ready)"));
 }
 

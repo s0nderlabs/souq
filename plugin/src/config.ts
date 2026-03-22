@@ -63,26 +63,32 @@ export function getRpcUrl(): string {
 
 const SOUQ_SEED_DIR = join(homedir(), ".souq");
 const SOUQ_SEED_PATH = join(SOUQ_SEED_DIR, "seed");
-const SOUQ_AGENT_ID_PATH = join(SOUQ_SEED_DIR, "agent-id");
 
-// ── Agent ID Persistence ──
+// ── Agent ID Persistence (per-wallet) ──
 
-export function getCachedAgentId(): string | null {
+function agentIdPath(walletAddress: string): string {
+  return join(SOUQ_SEED_DIR, `agent-id-${walletAddress.toLowerCase()}`);
+}
+
+export function getCachedAgentId(walletAddress?: string): string | null {
+  if (!walletAddress) return null;
   try {
-    if (existsSync(SOUQ_AGENT_ID_PATH)) {
-      const id = readFileSync(SOUQ_AGENT_ID_PATH, "utf-8").trim();
+    const path = agentIdPath(walletAddress);
+    if (existsSync(path)) {
+      const id = readFileSync(path, "utf-8").trim();
       if (id.length > 0) return id;
     }
   } catch { /* skip */ }
   return null;
 }
 
-export function cacheAgentId(agentId: string): void {
+export function cacheAgentId(agentId: string, walletAddress?: string): void {
+  if (!walletAddress) return;
   try {
     if (!existsSync(SOUQ_SEED_DIR)) {
       mkdirSync(SOUQ_SEED_DIR, { mode: 0o700, recursive: true });
     }
-    writeFileSync(SOUQ_AGENT_ID_PATH, agentId, { mode: 0o600 });
+    writeFileSync(agentIdPath(walletAddress), agentId, { mode: 0o600 });
   } catch { /* skip */ }
 }
 

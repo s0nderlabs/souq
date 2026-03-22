@@ -135,7 +135,7 @@ async function createJobHandler(
     let optParams: Hex = "0x";
     if (params.useHook) {
       // Auto-populate clientAgentId from cache if not provided
-      const clientAgentId = params.clientAgentId || Number(getCachedAgentId() || "0");
+      const clientAgentId = params.clientAgentId || Number(getCachedAgentId(clientAddress) || "0");
 
       // SigilGateHook.afterCreateJob expects:
       // abi.encode(clientAgentId, providerAgentId, evaluatorAgentId, providerPolicies[], evaluatorPolicies[])

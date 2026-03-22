@@ -57,7 +57,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<RegisterIdentity
     const encryptionPublicKey = bytesToHex(keypair.publicKey);
 
     // Check cache first
-    const cachedId = getCachedAgentId();
+    const cachedId = getCachedAgentId(address);
     if (cachedId) {
       return {
         success: true,
@@ -138,7 +138,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<RegisterIdentity
       }
     }
 
-    if (agentId !== "unknown") cacheAgentId(agentId);
+    if (agentId !== "unknown") cacheAgentId(agentId, address);
 
     return {
       success: true,

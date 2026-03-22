@@ -39,13 +39,14 @@ export function registerTriggerAssessment(server: McpServer): void {
 async function handler(params: z.infer<typeof Schema>): Promise<TriggerAssessmentResult> {
   try {
     const account = await getWdkAccount();
+    const walletAddr = await getAddress();
 
     // Auto-detect agentId from cache if not provided
     let agentId: string;
     if (params.agentId) {
       agentId = params.agentId.toString();
     } else {
-      const cached = getCachedAgentId();
+      const cached = getCachedAgentId(walletAddr);
       if (!cached) {
         return { success: false, message: "No agentId provided and none cached. Call setup_wallet first to register your identity." };
       }

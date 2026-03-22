@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.6 (2026-03-22)
+
+### Added
+- `agent:ready` relay event broadcast on startup and setup_wallet — shares encryption pubkey with all connected agents
+- Auto-discover evaluator pubkey in `submit_work` — `evaluatorPublicKey` param now optional
+- Auto-discover client pubkey and deliverable CID in `complete_job` — `clientPublicKey` and `deliverableCid` params now optional
+- `findPubkeyByAddress` helper in relay module for pubkey lookup from notification buffer
+
+### Fixed
+- Per-wallet agentId caching (`~/.souq/agent-id-{address}`) — multiple agents on same machine no longer share one cache file
+
 ## 1.1.5 (2026-03-22)
 
 ### Added

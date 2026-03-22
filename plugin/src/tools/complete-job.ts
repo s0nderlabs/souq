@@ -20,6 +20,7 @@ import {
   deriveKeypairFromSeed,
   type EncryptedPackage,
 } from "../encryption.js";
+import { findPubkeyByAddress, getBufferedEvents } from "../relay.js";
 
 const CompleteJobSchema = z.object({
   jobId: z.number().describe("The job ID to complete/approve."),
@@ -28,12 +29,14 @@ const CompleteJobSchema = z.object({
     .describe("Evaluation notes explaining the approval decision."),
   clientPublicKey: z
     .string()
+    .optional()
     .describe(
-      "Hex-encoded uncompressed public key of the client for deliverable re-encryption (65 bytes, 0x04 prefix)."
+      "Hex-encoded uncompressed public key of the client for deliverable re-encryption (65 bytes, 0x04 prefix). Auto-detected from notifications if omitted."
     ),
   deliverableCid: z
     .string()
-    .describe("IPFS CID of the encrypted deliverable submitted by the provider."),
+    .optional()
+    .describe("IPFS CID of the encrypted deliverable submitted by the provider. Auto-detected from notifications if omitted."),
 });
 
 interface CompleteJobResult {
@@ -118,8 +121,20 @@ async function completeJobHandler(
       };
     }
 
+    // Resolve deliverableCid (from param or auto-discover from notifications)
+    let deliverableCid = params.deliverableCid;
+    if (!deliverableCid) {
+      const events = getBufferedEvents();
+      const submitEvent = events.filter(e => e.type === "job:submitted" && e.jobId === params.jobId).pop();
+      deliverableCid = (submitEvent?.data as Record<string, string>)?.deliverableCid;
+      if (!deliverableCid) {
+        return { success: false, message: "Deliverable CID not found. Either pass deliverableCid or ensure the provider's submit event was received via notifications." };
+      }
+      console.error(`[souq] Auto-discovered deliverableCid from notifications: ${deliverableCid}`);
+    }
+
     // Fetch encrypted deliverable from IPFS
-    const encryptedData = await fetchFromIpfs(params.deliverableCid);
+    const encryptedData = await fetchFromIpfs(deliverableCid);
     const encryptedPayload = JSON.parse(encryptedData.toString("utf-8")) as {
       package: EncryptedPackage;
     };
@@ -142,15 +157,25 @@ async function completeJobHandler(
       evaluator: callerAddress,
       decision: "approved",
       reason: params.reason,
-      deliverableCid: params.deliverableCid,
+      deliverableCid,
       evaluatedAt: new Date().toISOString(),
     };
     const { cid: reasonCid } = await pinJson(evidencePayload);
     const reasonHash = cidToBytes32(reasonCid);
 
+    // Resolve client public key (from param or auto-discover from notifications)
+    let clientPubKey: string | undefined = params.clientPublicKey;
+    if (!clientPubKey) {
+      clientPubKey = findPubkeyByAddress(job.client) || undefined;
+      if (!clientPubKey) {
+        return { success: false, message: "Client's encryption public key not found. Either pass clientPublicKey or ensure the client has called setup_wallet." };
+      }
+      console.error(`[souq] Auto-discovered client pubkey from notifications`);
+    }
+
     // Re-encrypt deliverable for the client
     const clientPubKeyBytes = hexToBytes(
-      params.clientPublicKey as `0x${string}`
+      clientPubKey as `0x${string}`
     );
     const reEncryptedKey = await reEncryptKey(
       encryptedPackage,

@@ -10,6 +10,7 @@ import { ESCROW_ADDRESS, explorerTxUrl } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 import { pinJson, cidToBytes32, toIpfsUri } from "../ipfs.js";
 import { encrypt } from "../encryption.js";
+import { findPubkeyByAddress } from "../relay.js";
 
 const SubmitWorkSchema = z.object({
   jobId: z.number().describe("The job ID to submit work for."),
@@ -18,8 +19,9 @@ const SubmitWorkSchema = z.object({
     .describe("The work content/deliverable to submit. Will be encrypted for the evaluator."),
   evaluatorPublicKey: z
     .string()
+    .optional()
     .describe(
-      "Hex-encoded uncompressed public key of the evaluator for encryption (65 bytes, 0x04 prefix)."
+      "Hex-encoded uncompressed public key of the evaluator for encryption (65 bytes, 0x04 prefix). Auto-detected from notifications if omitted."
     ),
 });
 
@@ -99,9 +101,22 @@ async function submitWorkHandler(
       };
     }
 
+    // Resolve evaluator public key (from param or auto-discover from notifications)
+    let evaluatorPubKey: string | undefined = params.evaluatorPublicKey;
+    if (!evaluatorPubKey) {
+      evaluatorPubKey = findPubkeyByAddress(job.evaluator) || undefined;
+      if (!evaluatorPubKey) {
+        return {
+          success: false,
+          message: "Evaluator's encryption public key not found. Either pass evaluatorPublicKey or ensure the evaluator has called setup_wallet.",
+        };
+      }
+      console.error(`[souq] Auto-discovered evaluator pubkey from notifications`);
+    }
+
     // Encrypt deliverable for evaluator
     const evaluatorPubKeyBytes = hexToBytes(
-      params.evaluatorPublicKey as `0x${string}`
+      evaluatorPubKey as `0x${string}`
     );
     const deliverableBuffer = Buffer.from(params.deliverable, "utf-8");
     const encryptedPackage = await encrypt(deliverableBuffer, evaluatorPubKeyBytes);

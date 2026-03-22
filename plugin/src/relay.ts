@@ -8,8 +8,8 @@ import { getSouqApiUrl } from "./config.js";
 // ── Types ──
 
 export interface RelayEvent {
-  type: "job:created" | "job:funded" | "job:submitted" | "job:completed" | "job:rejected" | "job:provider_set" | "job:budget_set";
-  jobId: number;
+  type: "job:created" | "job:funded" | "job:submitted" | "job:completed" | "job:rejected" | "job:provider_set" | "job:budget_set" | "agent:ready";
+  jobId?: number;
   from: string;
   timestamp: number;
   data?: Record<string, unknown>;
@@ -153,6 +153,19 @@ export function getBufferedEvents(since?: number, limit = 50): RelayEvent[] {
     ? eventBuffer.filter(e => e.timestamp > since)
     : [...eventBuffer];
   return events.slice(-limit);
+}
+
+// ── Pubkey Lookup ──
+
+export function findPubkeyByAddress(address: string): string | null {
+  const addr = address.toLowerCase();
+  for (let i = eventBuffer.length - 1; i >= 0; i--) {
+    const e = eventBuffer[i];
+    if (e.type === "agent:ready" && e.from.toLowerCase() === addr) {
+      return (e.data as Record<string, string>)?.encryptionPublicKey || null;
+    }
+  }
+  return null;
 }
 
 // ── Disconnect ──

@@ -11,6 +11,7 @@ import { usdtAbi } from "../abi/usdt.js";
 import { identityAbi } from "../abi/identity.js";
 import { deriveKeypairFromSeed } from "../encryption.js";
 import { pinJson, toIpfsUri } from "../ipfs.js";
+import { sendRelayEvent } from "../relay.js";
 
 const SetupWalletSchema = z.object({
   name: z.string().default("Souq Agent").describe("Agent display name"),
@@ -112,7 +113,7 @@ async function setupWalletHandler(
     let identityResult: SetupWalletResult["identity"];
     try {
       // Check local cache first (fastest, no RPC)
-      const cachedId = getCachedAgentId();
+      const cachedId = getCachedAgentId(address);
       if (cachedId) {
         identityResult = { agentId: cachedId, status: "already_registered" };
         console.error(`[souq] Identity from cache: agentId=${cachedId}`);
@@ -170,7 +171,7 @@ async function setupWalletHandler(
         }
 
         // Cache agentId locally for future startups
-        if (agentId !== "unknown") cacheAgentId(agentId);
+        if (agentId !== "unknown") cacheAgentId(agentId, address);
         identityResult = { agentId, status: "registered", name: params.name };
         console.error(`[souq] Identity registered: agentId=${agentId}`);
       }
@@ -179,6 +180,9 @@ async function setupWalletHandler(
       // Non-fatal — wallet works without identity, just can't use hooks
       console.error(`[souq] Identity registration skipped: ${identityError instanceof Error ? identityError.message : String(identityError)}`);
     }
+
+    // Broadcast agent:ready with pubkey so other agents can discover it
+    sendRelayEvent({ type: "agent:ready", data: { address, encryptionPublicKey, agentId: identityResult?.agentId } });
 
     return {
       success: true,
