@@ -121,17 +121,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const completedEvent = timeline.find((e) => e.type === "job:completed");
   const payouts = completedEvent?.data?.payouts as Record<string, string> | undefined;
 
-  // Prefer on-chain status (catches expired/refunded that relay misses)
-  let onChainStatus: string | null = null;
-  if (onChainJob) {
-    // getJob returns a tuple — wagmi may return as array or object
-    const jobResult = onChainJob as unknown;
-    const statusVal = Array.isArray(jobResult)
-      ? Number(jobResult[8])
-      : Number((jobResult as Record<string, unknown>).status ?? (jobResult as unknown[])[8] ?? 0);
-    onChainStatus = JOB_STATUS[statusVal]?.toLowerCase() || "open";
-  }
-
+  // Relay status — derived from timeline events, updates in real-time via WebSocket
   const relayStatus = completedEvent
     ? "completed"
     : timeline.find((e) => e.type === "job:rejected")
@@ -142,7 +132,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           ? "funded"
           : "open";
 
-  const actualStatus = onChainStatus || relayStatus;
+  // On-chain status — fallback for edge cases (expired jobs have no relay event)
+  let onChainStatus: string | null = null;
+  if (onChainJob) {
+    const jobResult = onChainJob as unknown;
+    const statusVal = Array.isArray(jobResult)
+      ? Number(jobResult[8])
+      : Number((jobResult as Record<string, unknown>).status ?? (jobResult as unknown[])[8] ?? 0);
+    onChainStatus = JOB_STATUS[statusVal]?.toLowerCase() || "open";
+  }
+
+  // Relay first (real-time), on-chain only for expired/edge cases
+  const actualStatus = relayStatus !== "open" ? relayStatus
+    : onChainStatus === "expired" ? "expired"
+    : onChainStatus || relayStatus;
 
   const showBids = actualStatus === "open" && isZeroAddress(provider);
   const bids = bidData?.bids || [];
