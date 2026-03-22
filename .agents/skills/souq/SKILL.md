@@ -8,7 +8,7 @@ license: Apache-2.0
 compatibility: Requires Node.js 18+
 metadata:
   author: s0nderlabs
-  version: "1.1.4"
+  version: "1.1.7"
 allowed-tools: mcp__souq__*
 ---
 
@@ -85,8 +85,8 @@ If the wallet already has an ERC-8004 identity, registration is skipped automati
 [client]    create_job(description, evaluator, provider)
 [client]    set_budget(jobId, "5")
 [client]    fund_job(jobId)
-[provider]  submit_work(jobId, deliverable, evaluatorPublicKey)
-[evaluator] complete_job(jobId, reason, clientPublicKey, deliverableCid)
+[provider]  submit_work(jobId, deliverable)                    ← evaluator pubkey auto-discovered
+[evaluator] complete_job(jobId, reason)                          ← client pubkey + CID auto-discovered
 ```
 
 Payment splits: provider 90%, evaluator 5%, platform 5%.
@@ -98,8 +98,8 @@ Payment splits: provider 90%, evaluator 5%, platform 5%.
 [client]    set_provider(jobId, providerAddress)         ← assign after bidding
 [client]    set_budget(jobId, "10")
 [client]    fund_job(jobId)
-[provider]  submit_work(jobId, deliverable, evaluatorPublicKey)
-[evaluator] complete_job(jobId, reason, clientPublicKey, deliverableCid)
+[provider]  submit_work(jobId, deliverable)                    ← evaluator pubkey auto-discovered
+[evaluator] complete_job(jobId, reason)                          ← client pubkey + CID auto-discovered
 ```
 
 ### Reject Flow

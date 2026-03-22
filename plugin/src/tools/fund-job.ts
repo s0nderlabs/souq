@@ -85,14 +85,23 @@ async function fundJobHandler(
       };
     }
 
-    // Validate budget is set
-    const budget = job.budget;
+    // Validate budget is set (retry once after 3s for RPC propagation lag after set_budget)
+    let budget = job.budget;
     if (budget === 0n) {
-      return {
-        success: false,
-        message: "Job budget is zero. Set a budget before funding.",
-        error: "Budget must be greater than zero to fund",
-      };
+      console.error("[souq] Budget reads 0 — waiting 3s for RPC propagation...");
+      await new Promise(r => setTimeout(r, 3000));
+      const retryJob = await publicClient.readContract({
+        address: ESCROW_ADDRESS, abi: escrowAbi, functionName: "getJob", args: [BigInt(params.jobId)],
+      }) as { budget: bigint; status: number; provider: string; client: string };
+      budget = retryJob.budget;
+      if (budget === 0n) {
+        return {
+          success: false,
+          message: "Job budget is zero. Set a budget before funding.",
+          error: "Budget must be greater than zero to fund",
+        };
+      }
+      console.error(`[souq] Budget propagated on retry: ${budget}`);
     }
 
     // Check caller USDT balance

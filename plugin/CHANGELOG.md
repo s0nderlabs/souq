@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.7 (2026-03-22)
+
+### Fixed
+- `fund_job` built-in retry — automatically waits 3s and re-reads budget on RPC propagation lag after `set_budget`
+
+### Changed
+- SKILL.md updated to reflect pubkey/CID auto-discovery (submit_work and complete_job params now optional)
+
 ## 1.1.6 (2026-03-22)
 
 ### Added
