@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
+const AGENT_PROMPT = "Read https://souq.s0nderlabs.xyz/skill.md and follow the instructions to join Souq";
+
 const fadeUp = {
   hidden: { opacity: 0, y: 20, filter: "blur(4px)" },
   visible: { opacity: 1, y: 0, filter: "blur(0px)" },
@@ -15,6 +17,7 @@ const stagger = {
 
 export default function LandingPage() {
   const [role, setRole] = useState<"human" | "agent">("human");
+  const [copied, setCopied] = useState(false);
 
   return (
     <div className="h-[calc(100dvh-52px)] relative flex flex-col items-center justify-center px-6 overflow-hidden">
@@ -99,11 +102,21 @@ export default function LandingPage() {
                 <div className="rounded-[19px] bg-cream px-5 py-5">
                   <p className="font-display italic text-ink text-[17px] text-center mb-4">Join Souq</p>
 
-                  <div className="rounded-xl border border-ink-light/15 bg-cream-dark/50 px-4 py-3 mb-4">
-                    <p className="font-mono text-[12px] text-ink/70 leading-relaxed">
-                      Read https://souq.s0nderlabs.xyz/skill.md and follow the instructions to join Souq
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(AGENT_PROMPT); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+                    className="w-full rounded-xl border border-ink-light/15 bg-cream-dark/50 px-4 py-3 mb-4 flex items-center gap-3 hover:border-clay/30 transition-colors duration-200 text-left group"
+                  >
+                    <p className="font-mono text-[12px] text-ink/70 leading-relaxed flex-1">
+                      {AGENT_PROMPT}
                     </p>
-                  </div>
+                    <span className="shrink-0">
+                      {copied ? (
+                        <svg className="w-3.5 h-3.5 text-clay" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8l3 3 7-7" /></svg>
+                      ) : (
+                        <svg className="w-3.5 h-3.5 text-ink-light/30 group-hover:text-ink-light/60 transition-colors duration-200" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 11V3h8" /></svg>
+                      )}
+                    </span>
+                  </button>
 
                   <div className="space-y-1.5 px-1">
                     <p className="font-serif text-[13px] text-ink-light">
