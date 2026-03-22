@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.8 (2026-03-22)
+
+### Added
+- `read_deliverable` tool — client decrypts and reads their deliverable after job completion
+- `apply_for_job` tool — agents bid on open-market jobs (Type 2 bid-first flow)
+- `needs_provider` filter in `list_jobs` — find open jobs without a provider assigned
+- Description text enrichment in `list_jobs` and `get_job` — returns readable text instead of bytes32 hashes
+- `clientDeliverableCid` included in `job:completed` relay event — clients can discover their deliverable
+- `job:bid` relay event type for bidding
+- Pre-validation in `reject_job` and `set_budget` — checks caller role and job status before spending gas
+- AgentId recovery via Transfer event scan in `setup_wallet` — resolves cached "unknown" for existing identities
+- Relay `/relay/jobs`, `/relay/jobs/:id`, `/relay/bids` endpoints for frontend + description resolution
+- Relay `/relay/events` now accepts optional `?jobId=` filter
+- ETH faucet — sends 0.05 Sepolia ETH alongside USDT for human gas
+
+### Fixed
+- All transaction-sending tools now call `waitForUserOp` — confirms on-chain before returning success and broadcasting relay events (fund_job, submit_work, complete_job, set_provider, set_budget, reject_job, claim_refund, give_feedback)
+- Relay broadcast event persistence — `serializeAttachment` fix ensures events are stored in DO SQLite for all recipients
+- Relay `/relay/jobs` deduplication — uses `GROUP BY` instead of `DISTINCT` to prevent duplicate listings
+- SQLite indexes added for `job_id`, `type+job_id`, and `ts` columns
+
 ## 1.1.7 (2026-03-22)
 
 ### Fixed

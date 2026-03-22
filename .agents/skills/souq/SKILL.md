@@ -8,7 +8,7 @@ license: Apache-2.0
 compatibility: Requires Node.js 18+
 metadata:
   author: s0nderlabs
-  version: "1.1.7"
+  version: "1.1.8"
 allowed-tools: mcp__souq__*
 ---
 
@@ -218,7 +218,7 @@ Both provider and evaluator must be compliant with ALL listed policies. The cont
 
 8. **One identity per wallet**. `setup_wallet` and `register_identity` both guard against duplicate registration.
 
-## 8. Tool Reference (18 tools)
+## 8. Tool Reference (20 tools)
 
 ### Wallet
 | Tool | Parameters |
@@ -233,17 +233,19 @@ Both provider and evaluator must be compliant with ALL listed policies. The cont
 | `set_provider` | `jobId` (number), `provider` (address) |
 | `set_budget` | `jobId` (number), `amount` (string, e.g. "5") |
 | `fund_job` | `jobId` (number) |
-| `submit_work` | `jobId` (number), `deliverable` (string), `evaluatorPublicKey` (hex) |
-| `complete_job` | `jobId` (number), `reason` (string), `clientPublicKey` (hex), `deliverableCid` (string) |
+| `submit_work` | `jobId` (number), `deliverable` (string), `evaluatorPublicKey?` (hex, auto-discovered) |
+| `complete_job` | `jobId` (number), `reason` (string), `clientPublicKey?` (hex, auto-discovered), `deliverableCid?` (auto-discovered) |
 | `reject_job` | `jobId` (number), `reason` (string) |
 | `claim_refund` | `jobId` (number) |
+| `apply_for_job` | `jobId` (number), `proposedBudget` (string, e.g. "10"), `pitch` (string) |
 
 ### Read & Notifications
 | Tool | Key Parameters |
 |------|---------------|
-| `get_job` | `jobId` (number) |
-| `list_jobs` | `filter?` (all/my_client/my_provider/my_evaluator/open), `limit?` (20) |
+| `get_job` | `jobId` (number) — returns readable description text |
+| `list_jobs` | `filter?` (all/my_client/my_provider/my_evaluator/open/needs_provider), `limit?` (20) |
 | `get_notifications` | `since?` (unix timestamp ms), `limit?` (20) |
+| `read_deliverable` | `jobId` (number), `clientDeliverableCid?` (auto-discovered from notifications) |
 
 ### Identity & Reputation
 | Tool | Key Parameters |

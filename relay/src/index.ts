@@ -62,12 +62,26 @@ app.route("/", bundlerRoutes);
 app.route("/", ipfsRoutes);
 app.route("/", sigilRoutes);
 
-// WebSocket relay + event history
+// WebSocket relay + event history + job metadata
 app.get("/relay", async (c) => {
   const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
   return stub.fetch(c.req.raw);
 });
 app.get("/relay/events", async (c) => {
+  const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
+  return stub.fetch(c.req.raw);
+});
+app.get("/relay/jobs", async (c) => {
+  const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
+  return stub.fetch(c.req.raw);
+});
+app.get("/relay/jobs/:id", async (c) => {
+  const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
+  const id = c.req.param("id");
+  const rewritten = new Request(new URL(`/relay/jobs/${id}`, c.req.url), c.req.raw);
+  return stub.fetch(rewritten);
+});
+app.get("/relay/bids", async (c) => {
   const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
   return stub.fetch(c.req.raw);
 });

@@ -5,8 +5,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { formatUnits, zeroAddress } from "viem";
 import { getPublicClient } from "../protocol.js";
-import { ESCROW_ADDRESS, USDT_DECIMALS } from "../config.js";
+import { ESCROW_ADDRESS, USDT_DECIMALS, getSouqApiUrl } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
+import { getBufferedEvents } from "../relay.js";
+import { originalFetch } from "../x402-fetch-patch.js";
 
 const GetJobSchema = z.object({
   jobId: z.number().describe("The job ID to look up."),
@@ -27,6 +29,7 @@ interface GetJobResult {
     expiresAt: string;
     isExpired: boolean;
     description: string;
+    descriptionHash: string;
     deliverable: string;
     hook: string;
     hasHook: boolean;
@@ -94,6 +97,28 @@ async function getJobHandler(
     const isExpired = Date.now() > expiresAtDate.getTime();
     const hasHook = job.hook !== zeroAddress;
 
+    // Resolve human-readable description from relay events
+    let descriptionText: string = job.description;
+    let descriptionResolved = false;
+    // 1. Check local event buffer first
+    const localEvent = getBufferedEvents().filter(
+      (e) => e.type === "job:created" && e.jobId === params.jobId
+    ).pop();
+    if (localEvent?.data) {
+      const d = localEvent.data as Record<string, string>;
+      if (d.description) { descriptionText = d.description; descriptionResolved = true; }
+    }
+    // 2. Fallback to relay API if not found locally
+    if (!descriptionResolved) {
+      try {
+        const res = await originalFetch(`${getSouqApiUrl()}/relay/jobs/${params.jobId}`);
+        if (res.ok) {
+          const relayJob = (await res.json()) as { description?: string };
+          if (relayJob.description) descriptionText = relayJob.description;
+        }
+      } catch { /* relay lookup non-fatal */ }
+    }
+
     return {
       success: true,
       message: `Job #${params.jobId}: ${statusName}`,
@@ -108,7 +133,8 @@ async function getJobHandler(
         budgetRaw: job.budget.toString(),
         expiresAt: expiresAtDate.toISOString(),
         isExpired,
-        description: job.description,
+        description: descriptionText,
+        descriptionHash: job.description,
         deliverable: job.deliverable,
         hook: job.hook,
         hasHook,

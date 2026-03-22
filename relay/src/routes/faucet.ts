@@ -3,6 +3,7 @@ import {
   createWalletClient,
   http,
   parseAbi,
+  parseEther,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { AppContext } from "../types";
@@ -57,6 +58,17 @@ faucet.post("/faucet", async (c) => {
       args: [address as `0x${string}`, FAUCET_AMOUNT],
     });
 
+    // Send ETH for gas (best-effort — humans need gas for direct contract calls)
+    let ethTxHash: string | undefined;
+    try {
+      ethTxHash = await client.sendTransaction({
+        to: address as `0x${string}`,
+        value: parseEther("0.05"),
+      });
+    } catch (ethErr) {
+      console.error("[faucet] ETH transfer failed (non-fatal):", ethErr instanceof Error ? ethErr.message : ethErr);
+    }
+
     // Record the faucet claim
     await c.env.BOOTSTRAP_KV.put(
       kvKey,
@@ -74,6 +86,8 @@ faucet.post("/faucet", async (c) => {
       success: true,
       amount: "100",
       txHash,
+      ethTxHash,
+      ethAmount: ethTxHash ? "0.05" : undefined,
     });
   } catch (error) {
     console.error("[faucet] Transfer failed:", error);

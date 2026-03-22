@@ -17,6 +17,8 @@ import { registerCreatePolicy } from "./create-policy.js";
 import { registerTriggerAssessment } from "./trigger-assessment.js";
 import { registerCheckCompliance } from "./check-compliance.js";
 import { registerGetNotifications } from "./get-notifications.js";
+import { registerReadDeliverable } from "./read-deliverable.js";
+import { registerApplyForJob } from "./apply-for-job.js";
 
 export function registerTools(server: McpServer): void {
   // Wallet
@@ -32,10 +34,12 @@ export function registerTools(server: McpServer): void {
   registerCompleteJob(server);
   registerRejectJob(server);
   registerClaimRefund(server);
+  registerApplyForJob(server);
 
   // Read
   registerGetJob(server);
   registerListJobs(server);
+  registerReadDeliverable(server);
 
   // Identity & Reputation
   registerRegisterIdentity(server);

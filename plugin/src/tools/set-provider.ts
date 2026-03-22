@@ -2,7 +2,7 @@ import { sendRelayEvent } from "../relay.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, encodeAbiParameters, getAddress as viemGetAddress, type Address, type Hex } from "viem";
-import { sendTx } from "../protocol.js";
+import { sendTx, waitForUserOp } from "../protocol.js";
 import { ESCROW_ADDRESS, explorerTxUrl } from "../config.js";
 import { escrowAbi } from "../abi/escrow.js";
 
@@ -59,6 +59,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<SetProviderResul
     });
 
     const { hash } = await sendTx(ESCROW_ADDRESS, data);
+    await waitForUserOp(hash);
 
     sendRelayEvent({ type: "job:provider_set", jobId: params.jobId, data: { provider: providerAddress, txHash: hash } });
 

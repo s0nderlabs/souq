@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData } from "viem";
-import { sendTx } from "../protocol.js";
+import { sendTx, waitForUserOp } from "../protocol.js";
 import { REPUTATION_REGISTRY, explorerTxUrl } from "../config.js";
 import { reputationAbi } from "../abi/reputation.js";
 import { pinJson, cidToBytes32, toIpfsUri } from "../ipfs.js";
@@ -80,6 +80,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<GiveFeedbackResu
     });
 
     const { hash } = await sendTx(REPUTATION_REGISTRY, data);
+    await waitForUserOp(hash);
 
     return {
       success: true,

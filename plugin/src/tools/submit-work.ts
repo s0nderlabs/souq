@@ -5,7 +5,7 @@ import { sendRelayEvent } from "../relay.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, hexToBytes, type Hex } from "viem";
-import { getAddress, sendTx, getPublicClient } from "../protocol.js";
+import { getAddress, sendTx, getPublicClient, waitForUserOp } from "../protocol.js";
 import { ESCROW_ADDRESS, explorerTxUrl } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 import { pinJson, cidToBytes32, toIpfsUri } from "../ipfs.js";
@@ -140,8 +140,9 @@ async function submitWorkHandler(
       args: [BigInt(params.jobId), deliverableHash, "0x" as Hex],
     });
 
-    // Send transaction
+    // Send transaction and wait for on-chain confirmation
     const txResult = await sendTx(ESCROW_ADDRESS, data);
+    await waitForUserOp(txResult.hash);
 
     sendRelayEvent({ type: "job:submitted", jobId: params.jobId, data: { deliverableCid, txHash: txResult.hash } });
 

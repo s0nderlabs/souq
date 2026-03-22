@@ -6,9 +6,9 @@ import { sendRelayEvent } from "../relay.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, type Hex } from "viem";
-import { initWdk, sendTx } from "../protocol.js";
+import { initWdk, sendTx, getAddress, getPublicClient, waitForUserOp } from "../protocol.js";
 import { ESCROW_ADDRESS, explorerTxUrl } from "../config.js";
-import { escrowAbi } from "../abi/escrow.js";
+import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 import { pinJson, cidToBytes32, toIpfsUri } from "../ipfs.js";
 
 const RejectJobSchema = z.object({
@@ -55,6 +55,30 @@ async function rejectJobHandler(
 ): Promise<RejectJobResult> {
   try {
     await initWdk();
+    const callerAddress = await getAddress();
+    const publicClient = getPublicClient();
+
+    // Pre-validate: read job and check caller role + status before wasting IPFS pin cost
+    const job = (await publicClient.readContract({
+      address: ESCROW_ADDRESS,
+      abi: escrowAbi,
+      functionName: "getJob",
+      args: [BigInt(params.jobId)],
+    })) as { client: string; evaluator: string; status: number };
+
+    if (job.status === 0) {
+      // Open — only client can cancel
+      if (callerAddress.toLowerCase() !== job.client.toLowerCase()) {
+        return { success: false, message: "Only the client can cancel an Open job", error: `Caller ${callerAddress} is not the client ${job.client}` };
+      }
+    } else if (job.status === 1 || job.status === 2) {
+      // Funded or Submitted — only evaluator can reject
+      if (callerAddress.toLowerCase() !== job.evaluator.toLowerCase()) {
+        return { success: false, message: "Only the evaluator can reject a Funded/Submitted job", error: `Caller ${callerAddress} is not the evaluator ${job.evaluator}` };
+      }
+    } else {
+      return { success: false, message: `Job cannot be rejected. Current status: ${JOB_STATUS[job.status as keyof typeof JOB_STATUS] ?? job.status}`, error: "Invalid status for rejection" };
+    }
 
     // Pin rejection reason to IPFS
     const reasonPayload = {
@@ -73,8 +97,9 @@ async function rejectJobHandler(
       args: [BigInt(params.jobId), reasonHash, "0x" as Hex],
     });
 
-    // Send transaction
+    // Send transaction and wait for on-chain confirmation
     const txResult = await sendTx(ESCROW_ADDRESS, data);
+    await waitForUserOp(txResult.hash);
 
     sendRelayEvent({ type: "job:rejected", jobId: params.jobId, data: { reasonCid, txHash: txResult.hash } });
 

@@ -8,7 +8,7 @@ import { getSouqApiUrl } from "./config.js";
 // ── Types ──
 
 export interface RelayEvent {
-  type: "job:created" | "job:funded" | "job:submitted" | "job:completed" | "job:rejected" | "job:provider_set" | "job:budget_set" | "agent:ready";
+  type: "job:created" | "job:funded" | "job:submitted" | "job:completed" | "job:rejected" | "job:provider_set" | "job:budget_set" | "job:bid" | "agent:ready";
   jobId?: number;
   from: string;
   timestamp: number;

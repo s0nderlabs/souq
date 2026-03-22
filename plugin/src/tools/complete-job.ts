@@ -5,7 +5,7 @@ import { sendRelayEvent } from "../relay.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, formatUnits, hexToBytes, type Hex } from "viem";
-import { getAddress, sendTx, getPublicClient } from "../protocol.js";
+import { getAddress, sendTx, getPublicClient, waitForUserOp } from "../protocol.js";
 import { ESCROW_ADDRESS, USDT_DECIMALS, explorerTxUrl, getSeedPhrase } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 import {
@@ -208,8 +208,9 @@ async function completeJobHandler(
       args: [BigInt(params.jobId), reasonHash, "0x" as Hex],
     });
 
-    // Send transaction
+    // Send transaction and wait for on-chain confirmation
     const txResult = await sendTx(ESCROW_ADDRESS, data);
+    await waitForUserOp(txResult.hash);
 
     // Read fee basis points for payout calculation
     const [platformFeeBP, evaluatorFeeBP] = await Promise.all([
@@ -231,7 +232,7 @@ async function completeJobHandler(
     const evaluatorFee = (budget * evaluatorFeeBP) / BPS_DENOMINATOR;
     const providerPayout = budget - platformFee - evaluatorFee;
 
-    sendRelayEvent({ type: "job:completed", jobId: params.jobId, data: { txHash: txResult.hash, providerPayout: formatUnits(providerPayout, USDT_DECIMALS) } });
+    sendRelayEvent({ type: "job:completed", jobId: params.jobId, data: { txHash: txResult.hash, providerPayout: formatUnits(providerPayout, USDT_DECIMALS), clientDeliverableCid, clientDeliverableUri: toIpfsUri(clientDeliverableCid) } });
 
     return {
       success: true,

@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, formatUnits } from "viem";
-import { sendTx, getPublicClient } from "../protocol.js";
+import { sendTx, getPublicClient, waitForUserOp } from "../protocol.js";
 import { ESCROW_ADDRESS, USDT_DECIMALS, explorerTxUrl } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 
@@ -80,6 +80,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<ClaimRefundResul
     });
 
     const { hash } = await sendTx(ESCROW_ADDRESS, data);
+    await waitForUserOp(hash);
 
     return {
       success: true,

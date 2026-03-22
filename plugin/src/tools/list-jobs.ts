@@ -5,15 +5,17 @@ import { getPublicClient, getAddress, initWdk } from "../protocol.js";
 import {
   ESCROW_ADDRESS,
   USDT_DECIMALS,
+  getSouqApiUrl,
 } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
+import { originalFetch } from "../x402-fetch-patch.js";
 
 const Schema = z.object({
   filter: z
-    .enum(["all", "my_client", "my_provider", "my_evaluator", "open"])
+    .enum(["all", "my_client", "my_provider", "my_evaluator", "open", "needs_provider"])
     .optional()
     .default("all")
-    .describe("Filter jobs: all, my_client, my_provider, my_evaluator, or open"),
+    .describe("Filter jobs: all, my_client, my_provider, my_evaluator, open, or needs_provider"),
   limit: z
     .number()
     .optional()
@@ -91,6 +93,18 @@ async function handler(params: z.infer<typeof Schema>): Promise<ListJobsResult> 
       };
     }
 
+    // Fetch description text from relay (batch — one call for all jobs)
+    const descriptionMap = new Map<number, string>();
+    try {
+      const res = await originalFetch(`${getSouqApiUrl()}/relay/jobs?limit=${limit}`);
+      if (res.ok) {
+        const data = (await res.json()) as { jobs: Array<{ jobId: number; description: string | null }> };
+        for (const j of data.jobs) {
+          if (j.description) descriptionMap.set(j.jobId, j.description);
+        }
+      }
+    } catch { /* relay lookup non-fatal */ }
+
     // Iterate from newest to oldest, collect matching jobs
     const jobs: JobInfo[] = [];
 
@@ -117,6 +131,8 @@ async function handler(params: z.infer<typeof Schema>): Promise<ListJobsResult> 
       // Apply filter
       if (filter === "open") {
         if (job.status !== 0) continue;
+      } else if (filter === "needs_provider") {
+        if (job.status !== 0 || job.provider !== zeroAddress) continue;
       } else if (filter === "my_client") {
         if (job.client.toLowerCase() !== myAddress) continue;
       } else if (filter === "my_provider") {
@@ -135,7 +151,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<ListJobsResult> 
         budget: job.budget === 0n ? "(not set)" : `${formatUnits(job.budget, USDT_DECIMALS)} USDT`,
         status: statusName,
         expiredAt: expiredAtDate.toISOString(),
-        description: job.description,
+        description: descriptionMap.get(id) || job.description,
         deliverable: job.deliverable,
         hook: job.hook === zeroAddress ? "(none)" : job.hook,
       });

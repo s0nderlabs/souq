@@ -2,9 +2,9 @@ import { sendRelayEvent } from "../relay.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, parseUnits, formatUnits } from "viem";
-import { sendTx } from "../protocol.js";
+import { sendTx, getAddress, getPublicClient, waitForUserOp } from "../protocol.js";
 import { ESCROW_ADDRESS, USDT_DECIMALS, explorerTxUrl } from "../config.js";
-import { escrowAbi } from "../abi/escrow.js";
+import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 
 const Schema = z.object({
   jobId: z.number().describe("The job ID to set the budget for"),
@@ -42,6 +42,25 @@ export function registerSetBudget(server: McpServer): void {
 
 async function handler(params: z.infer<typeof Schema>): Promise<SetBudgetResult> {
   try {
+    const callerAddress = await getAddress();
+    const publicClient = getPublicClient();
+
+    // Pre-validate: check job status and caller role
+    const job = (await publicClient.readContract({
+      address: ESCROW_ADDRESS,
+      abi: escrowAbi,
+      functionName: "getJob",
+      args: [BigInt(params.jobId)],
+    })) as { client: string; provider: string; status: number };
+
+    if (job.status !== 0) {
+      return { success: false, message: `Job is not Open. Current status: ${JOB_STATUS[job.status as keyof typeof JOB_STATUS] ?? job.status}`, error: "Budget can only be set on Open jobs" };
+    }
+    const caller = callerAddress.toLowerCase();
+    if (caller !== job.client.toLowerCase() && caller !== job.provider.toLowerCase()) {
+      return { success: false, message: "Only the client or provider can set the budget", error: `Caller ${callerAddress} is not client or provider` };
+    }
+
     const amountWei = parseUnits(params.amount, USDT_DECIMALS);
 
     const data = encodeFunctionData({
@@ -51,6 +70,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<SetBudgetResult>
     });
 
     const { hash } = await sendTx(ESCROW_ADDRESS, data);
+    await waitForUserOp(hash);
 
     sendRelayEvent({ type: "job:budget_set", jobId: params.jobId, data: { amount: params.amount, txHash: hash } });
 

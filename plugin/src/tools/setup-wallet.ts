@@ -127,10 +127,33 @@ async function setupWalletHandler(
       }) as bigint;
 
       if (identityBalance > 0n) {
-        // Registered on-chain but not cached — can't resolve agentId without Enumerable
-        // Save "registered" marker so we don't re-register
-        identityResult = { agentId: "unknown", status: "already_registered" };
-        console.error("[souq] Identity registered on-chain (agentId not cached)");
+        // Registered on-chain but not cached — scan Transfer events to recover agentId
+        let resolvedAgentId = "unknown";
+        try {
+          const logs = await publicClient.getLogs({
+            address: IDENTITY_REGISTRY,
+            event: {
+              type: "event",
+              name: "Transfer",
+              inputs: [
+                { name: "from", type: "address", indexed: true },
+                { name: "to", type: "address", indexed: true },
+                { name: "tokenId", type: "uint256", indexed: true },
+              ],
+            },
+            args: { from: "0x0000000000000000000000000000000000000000" as `0x${string}`, to: address },
+            fromBlock: "earliest",
+          });
+          if (logs.length > 0 && logs[0].args.tokenId != null) {
+            resolvedAgentId = logs[0].args.tokenId.toString();
+            cacheAgentId(resolvedAgentId, address);
+            console.error(`[souq] AgentId recovered from Transfer events: ${resolvedAgentId}`);
+          }
+        } catch (logErr) {
+          console.error(`[souq] Transfer log scan failed (non-fatal): ${logErr instanceof Error ? logErr.message : logErr}`);
+        }
+        identityResult = { agentId: resolvedAgentId, status: "already_registered" };
+        console.error(`[souq] Identity registered on-chain (agentId: ${resolvedAgentId})`);
       } else {
         // Register new identity
         const capabilities = params.capabilities.split(",").map(s => s.trim()).filter(Boolean);

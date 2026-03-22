@@ -27,6 +27,9 @@ export class SouqRelay extends DurableObject<Env> {
           ts      INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_wallet_ts ON events(wallet, ts);
+        CREATE INDEX IF NOT EXISTS idx_job_id ON events(job_id);
+        CREATE INDEX IF NOT EXISTS idx_type_job ON events(type, job_id);
+        CREATE INDEX IF NOT EXISTS idx_ts ON events(ts);
       `);
     });
   }
@@ -34,22 +37,24 @@ export class SouqRelay extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    // HTTP endpoint for fetching missed events
+    // HTTP endpoint for fetching missed events (with optional jobId filter)
     if (url.pathname === "/relay/events") {
       const wallet = url.searchParams.get("wallet");
       if (!wallet) {
         return Response.json({ error: "wallet param required" }, { status: 400 });
       }
       const since = Number(url.searchParams.get("since") || 0);
+      const jobId = Number(url.searchParams.get("jobId") || 0);
       const rows = this.ctx.storage.sql
         .exec(
-          "SELECT id, wallet, type, job_id, payload, ts FROM events WHERE wallet = ? AND ts > ? ORDER BY ts ASC LIMIT 100",
+          "SELECT id, wallet, type, job_id, payload, ts FROM events WHERE wallet = ? AND ts > ? AND (? = 0 OR job_id = ?) ORDER BY ts ASC LIMIT 100",
           wallet.toLowerCase(),
-          since
+          since,
+          jobId,
+          jobId
         )
         .toArray();
 
-      // Parse payload JSON for each row
       const events = rows.map((row: Record<string, unknown>) => ({
         ...(JSON.parse(row.payload as string) as Record<string, unknown>),
         type: row.type,
@@ -58,6 +63,110 @@ export class SouqRelay extends DurableObject<Env> {
       }));
 
       return Response.json(events);
+    }
+
+    // HTTP endpoint for listing jobs with descriptions (from stored job:created events)
+    if (url.pathname === "/relay/jobs") {
+      const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || 50), 200));
+      const rows = this.ctx.storage.sql
+        .exec(
+          "SELECT job_id, payload, MAX(ts) as ts FROM events WHERE type = 'job:created' AND job_id > 0 GROUP BY job_id ORDER BY ts DESC LIMIT ?",
+          limit
+        )
+        .toArray();
+
+      // Batch-fetch latest status for all jobs in one query (avoids N+1)
+      const jobIds = rows.map((r: Record<string, unknown>) => r.job_id as number);
+      const statusMap = new Map<number, string>();
+      if (jobIds.length > 0) {
+        const statusRows = this.ctx.storage.sql
+          .exec(
+            `SELECT job_id, type FROM events
+             WHERE job_id IN (${jobIds.map(() => "?").join(",")})
+             AND type IN ('job:completed','job:rejected','job:funded','job:submitted')
+             ORDER BY ts DESC`,
+            ...jobIds
+          )
+          .toArray();
+        for (const sr of statusRows) {
+          const jid = sr.job_id as number;
+          if (!statusMap.has(jid)) statusMap.set(jid, (sr.type as string).replace("job:", ""));
+        }
+      }
+
+      const jobs = rows.map((row: Record<string, unknown>) => {
+        const payload = JSON.parse(row.payload as string) as Record<string, unknown>;
+        const data = (payload.data || {}) as Record<string, unknown>;
+        return {
+          jobId: row.job_id,
+          description: data.description || null,
+          descriptionCid: data.descriptionCid || null,
+          client: data.client || null,
+          provider: data.provider || null,
+          evaluator: data.evaluator || null,
+          status: statusMap.get(row.job_id as number) || "open",
+          createdAt: row.ts,
+        };
+      });
+
+      return Response.json({ jobs });
+    }
+
+    // HTTP endpoint for single job detail with event timeline
+    const jobDetailMatch = url.pathname.match(/^\/relay\/jobs\/(\d+)$/);
+    if (jobDetailMatch) {
+      const jobId = Number(jobDetailMatch[1]);
+      const rows = this.ctx.storage.sql
+        .exec(
+          "SELECT type, payload, ts FROM events WHERE job_id = ? ORDER BY ts ASC",
+          jobId
+        )
+        .toArray();
+
+      if (rows.length === 0) {
+        return Response.json({ error: "Job not found in relay" }, { status: 404 });
+      }
+
+      // Extract description from job:created event
+      let description: string | null = null;
+      let descriptionCid: string | null = null;
+      const timeline = rows.map((row: Record<string, unknown>) => {
+        const payload = JSON.parse(row.payload as string) as Record<string, unknown>;
+        const data = (payload.data || {}) as Record<string, unknown>;
+        if (row.type === "job:created") {
+          description = (data.description as string) || null;
+          descriptionCid = (data.descriptionCid as string) || null;
+        }
+        return { type: row.type, data, timestamp: row.ts };
+      });
+
+      return Response.json({ jobId, description, descriptionCid, timeline });
+    }
+
+    // HTTP endpoint for bids on a job
+    if (url.pathname === "/relay/bids") {
+      const jobId = Number(url.searchParams.get("jobId") || 0);
+      const rows = this.ctx.storage.sql
+        .exec(
+          "SELECT payload, ts FROM events WHERE type = 'job:bid' AND (? = 0 OR job_id = ?) ORDER BY ts DESC LIMIT 50",
+          jobId,
+          jobId
+        )
+        .toArray();
+
+      const bids = rows.map((row: Record<string, unknown>) => {
+        const payload = JSON.parse(row.payload as string) as Record<string, unknown>;
+        const data = (payload.data || {}) as Record<string, unknown>;
+        return {
+          jobId: payload.jobId,
+          bidder: data.bidder || payload.from,
+          proposedBudget: data.proposedBudget,
+          pitch: data.pitch,
+          timestamp: row.ts,
+        };
+      });
+
+      return Response.json({ bids });
     }
 
     // WebSocket upgrade
@@ -69,7 +178,10 @@ export class SouqRelay extends DurableObject<Env> {
     const [client, server] = Object.values(pair);
     const wallet = url.searchParams.get("wallet") || "anonymous";
 
-    this.ctx.acceptWebSocket(server, [wallet.toLowerCase()]);
+    const normalizedWallet = wallet.toLowerCase();
+    this.ctx.acceptWebSocket(server, [normalizedWallet]);
+    // Store wallet as attachment so webSocketMessage can read it via deserializeAttachment
+    server.serializeAttachment([normalizedWallet]);
     this.ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("ping", "pong")
     );
@@ -101,7 +213,6 @@ export class SouqRelay extends DurableObject<Env> {
         this.storeEvent(toWallet, data, message);
       } else {
         // Broadcast to all connected clients except sender + persist for each
-        const senderTags = ws.deserializeAttachment?.() as string[] | null;
         for (const conn of this.ctx.getWebSockets()) {
           if (conn !== ws) {
             conn.send(message);

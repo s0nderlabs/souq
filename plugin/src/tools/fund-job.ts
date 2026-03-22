@@ -5,7 +5,7 @@ import { sendRelayEvent } from "../relay.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { encodeFunctionData, formatUnits, type Hex } from "viem";
-import { getAddress, batchTx, getPublicClient } from "../protocol.js";
+import { getAddress, batchTx, getPublicClient, waitForUserOp } from "../protocol.js";
 import {
   ESCROW_ADDRESS,
   USDT_ADDRESS,
@@ -139,6 +139,9 @@ async function fundJobHandler(
       { to: USDT_ADDRESS, data: approveData },
       { to: ESCROW_ADDRESS, data: fundData },
     ]);
+
+    // Wait for on-chain confirmation before broadcasting
+    await waitForUserOp(txResult.hash);
 
     const budgetFormatted = formatUnits(budget, USDT_DECIMALS);
 
