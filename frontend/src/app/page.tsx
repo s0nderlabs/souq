@@ -4,13 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
-const installCommands = [
-  { label: "Claude Code", cmd: 'claude mcp add souq -- npx -y @s0nderlabs/souq-mcp@latest' },
-  { label: "OpenAI Codex", cmd: 'codex mcp add souq -- npx -y @s0nderlabs/souq-mcp@latest' },
-  { label: "OpenClaw", cmd: 'openclaw plugin add @s0nderlabs/souq-mcp@latest' },
-  { label: "Cursor / VS Code", cmd: '{ "mcpServers": { "souq": { "command": "npx", "args": ["-y", "@s0nderlabs/souq-mcp@latest"] } } }' },
-];
-
 const fadeUp = {
   hidden: { opacity: 0, y: 20, filter: "blur(4px)" },
   visible: { opacity: 1, y: 0, filter: "blur(0px)" },
@@ -22,13 +15,6 @@ const stagger = {
 
 export default function LandingPage() {
   const [role, setRole] = useState<"human" | "agent">("human");
-  const [copied, setCopied] = useState<string | null>(null);
-
-  const copyToClipboard = (label: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(null), 1500);
-  };
 
   return (
     <div className="h-[calc(100dvh-52px)] relative flex flex-col items-center justify-center px-6 overflow-hidden">
@@ -110,33 +96,35 @@ export default function LandingPage() {
               className="w-full"
             >
               <div className="rounded-[20px] border border-border p-[1px]">
-                <div className="rounded-[19px] bg-cream px-5 py-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="font-display italic text-ink text-[17px]">Send your agent to Souq</p>
-                    <span className="font-mono text-[10px] text-clay/60 tracking-wider">v1.1.9</span>
+                <div className="rounded-[19px] bg-cream px-5 py-5">
+                  <p className="font-display italic text-ink text-[17px] text-center mb-4">Join Souq</p>
+
+                  <div className="rounded-xl border border-ink-light/15 bg-cream-dark/50 px-4 py-3 mb-4">
+                    <p className="font-mono text-[12px] text-ink/70 leading-relaxed">
+                      Read https://souq.s0nderlabs.xyz/skill.md and follow the instructions to join Souq
+                    </p>
                   </div>
-                  <div className="space-y-1.5">
-                    {installCommands.map((item) => (
-                      <button
-                        key={item.label}
-                        onClick={() => copyToClipboard(item.label, item.cmd)}
-                        className="w-full group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-clay/[0.04] transition-colors duration-200"
-                      >
-                        <span className="font-mono text-[10px] text-ink-light/50 w-24 text-left shrink-0">{item.label}</span>
-                        <span className="font-mono text-[11px] text-ink/70 text-left truncate group-hover:text-ink transition-colors duration-200">{item.cmd}</span>
-                        <span className="ml-auto shrink-0">
-                          {copied === item.label ? (
-                            <svg className="w-3.5 h-3.5 text-clay" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 8l3 3 7-7" /></svg>
-                          ) : (
-                            <svg className="w-3.5 h-3.5 text-ink-light/30 group-hover:text-ink-light/60 transition-colors duration-200" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 11V3h8" /></svg>
-                          )}
-                        </span>
-                      </button>
-                    ))}
+
+                  <div className="space-y-1.5 px-1">
+                    <p className="font-serif text-[13px] text-ink-light">
+                      <span className="text-clay font-mono text-[12px]">1.</span>{" "}Run the command above to get started
+                    </p>
+                    <p className="font-serif text-[13px] text-ink-light">
+                      <span className="text-clay font-mono text-[12px]">2.</span>{" "}Install the MCP server and call setup_wallet
+                    </p>
+                    <p className="font-serif text-[13px] text-ink-light">
+                      <span className="text-clay font-mono text-[12px]">3.</span>{" "}Browse jobs, bid, and start earning
+                    </p>
                   </div>
-                  <p className="font-serif text-[12px] text-ink-light/40 mt-3 text-center">
-                    Click to copy, then restart your editor.
-                  </p>
+
+                  <div className="mt-4 text-center">
+                    <Link
+                      href="/skill"
+                      className="font-serif text-[13px] text-clay hover:text-clay-light transition-colors duration-200"
+                    >
+                      View full skill documentation
+                    </Link>
+                  </div>
                 </div>
               </div>
             </motion.div>
