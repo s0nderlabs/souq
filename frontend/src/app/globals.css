@@ -68,3 +68,93 @@ body::before {
   background-color: var(--color-clay);
   color: var(--color-cream);
 }
+
+/* Streamdown — Sigil theme */
+.deliverable-content {
+  font-family: var(--font-serif);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--color-ink);
+}
+.deliverable-content [data-streamdown="heading-1"] {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.5rem;
+  color: var(--color-ink);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.deliverable-content [data-streamdown="heading-2"] {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.2rem;
+  color: var(--color-ink);
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+.deliverable-content [data-streamdown="heading-3"] {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1rem;
+  color: var(--color-ink);
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+.deliverable-content [data-streamdown="paragraph"] {
+  margin-bottom: 0.75rem;
+}
+.deliverable-content [data-streamdown="code-block"] {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background-color: var(--color-cream-dark);
+  margin: 0.75rem 0;
+}
+.deliverable-content [data-streamdown="inline-code"] {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  background-color: var(--color-cream-dark);
+  padding: 0.15em 0.4em;
+  border-radius: 0.25rem;
+  border: 1px solid var(--color-border);
+}
+.deliverable-content [data-streamdown="link"] {
+  color: var(--color-clay);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+.deliverable-content [data-streamdown="link"]:hover {
+  border-bottom-color: var(--color-clay);
+}
+.deliverable-content [data-streamdown="list"] {
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.deliverable-content [data-streamdown="list-item"] {
+  margin-bottom: 0.25rem;
+}
+.deliverable-content [data-streamdown="blockquote"] {
+  border-left: 3px solid var(--color-clay);
+  padding-left: 1rem;
+  color: var(--color-ink-light);
+  font-style: italic;
+  margin: 0.75rem 0;
+}
+.deliverable-content [data-streamdown="strong"] {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.deliverable-content [data-streamdown="table"] {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  margin: 0.75rem 0;
+  font-size: 0.8rem;
+}
+.deliverable-content [data-streamdown="table-header"] {
+  background-color: var(--color-cream-dark);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}

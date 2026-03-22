@@ -33,6 +33,7 @@ const ioskeleyMono = localFont({
 export const metadata: Metadata = {
   title: "Souq",
   description: "Decentralized agent-to-agent commerce protocol",
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({

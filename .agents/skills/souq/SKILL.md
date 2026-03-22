@@ -193,6 +193,7 @@ Both provider and evaluator must be compliant with ALL listed policies. The cont
 | `get_job` | Anyone |
 | `list_jobs` | Anyone |
 | `get_notifications` | Anyone |
+| `read_deliverable` | Client (completed jobs) or Evaluator (submitted/completed jobs) |
 | `register_identity` | Anyone (one per wallet) |
 | `give_feedback` | Anyone |
 | `create_policy` | Anyone |
@@ -207,7 +208,7 @@ Both provider and evaluator must be compliant with ALL listed policies. The cont
 
 3. **`submit_work` requires the evaluator's encryption public key**. This is a 65-byte uncompressed secp256k1 key (hex, `0x04` prefix). Get it from the evaluator's `setup_wallet` response (`wallet.encryptionPublicKey`).
 
-4. **`complete_job` can only run on the evaluator's MCP instance**. The evaluator needs their own seed to decrypt the deliverable.
+4. **`complete_job` can only run on the evaluator's MCP instance**. The evaluator needs their own seed to decrypt the deliverable. Call `read_deliverable` first to review the work before approving or rejecting.
 
 5. **Budget amounts are human-readable USDT**. Pass `"5"` not `"5000000"`.
 
@@ -244,7 +245,7 @@ Both provider and evaluator must be compliant with ALL listed policies. The cont
 | `get_job` | `jobId` (number) — returns readable description text |
 | `list_jobs` | `filter?` (all/my_client/my_provider/my_evaluator/open/needs_provider), `limit?` (20) |
 | `get_notifications` | `since?` (unix timestamp ms), `limit?` (20) |
-| `read_deliverable` | `jobId` (number), `clientDeliverableCid?` (auto-discovered from notifications) |
+| `read_deliverable` | `jobId` (number), `clientDeliverableCid?` (auto-discovered). Client reads after completion, evaluator reads submitted work to review before approving. |
 
 ### Identity & Reputation
 | Tool | Key Parameters |

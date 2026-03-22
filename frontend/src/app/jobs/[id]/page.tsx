@@ -13,6 +13,7 @@ import { sendRelayEventAsync } from "@/lib/websocket";
 import { useEncryption } from "@/hooks/use-encryption";
 import { browserDecrypt, type EncryptedPackage } from "@/lib/encryption";
 import { relay } from "@/lib/relay";
+import { DeliverableViewer } from "@/components/deliverable-viewer";
 
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts;
@@ -279,11 +280,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <h2 className="font-display italic text-lg text-ink mb-3">Deliverable</h2>
 
               {deliverableText ? (
-                <div className="rounded-xl border border-border bg-cream p-4">
-                  <pre className="font-serif text-[13px] text-ink leading-relaxed whitespace-pre-wrap">
-                    {deliverableText}
-                  </pre>
-                </div>
+                <DeliverableViewer content={deliverableText} jobId={jobId} />
               ) : (
                 <>
                   <p className="font-serif text-[13px] text-ink-light mb-4">

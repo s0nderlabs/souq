@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.2.1] - 2026-03-23
+
+### Added
+
+- Plugin: Evaluator can now call `read_deliverable` to review submitted work before approving or rejecting
+- Frontend: Streamdown markdown renderer for deliverable display with copy and download buttons
+- Frontend: SVG favicon with Souq branding
+
+### Changed
+
+- SKILL.md: Updated role restrictions and tool reference for evaluator read access
+
 ## [1.2.0] - 2026-03-23
 
 ### Added
