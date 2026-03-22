@@ -10,7 +10,7 @@ import { ESCROW_ADDRESS, explorerTxUrl } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 import { pinJson, cidToBytes32, toIpfsUri } from "../ipfs.js";
 import { encrypt } from "../encryption.js";
-import { findPubkeyByAddress } from "../relay.js";
+import { findPubkeyByAddressAsync } from "../relay.js";
 
 const SubmitWorkSchema = z.object({
   jobId: z.number().describe("The job ID to submit work for."),
@@ -104,7 +104,7 @@ async function submitWorkHandler(
     // Resolve evaluator public key (from param or auto-discover from notifications)
     let evaluatorPubKey: string | undefined = params.evaluatorPublicKey;
     if (!evaluatorPubKey) {
-      evaluatorPubKey = findPubkeyByAddress(job.evaluator) || undefined;
+      evaluatorPubKey = await findPubkeyByAddressAsync(job.evaluator) || undefined;
       if (!evaluatorPubKey) {
         return {
           success: false,

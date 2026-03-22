@@ -8,7 +8,7 @@ import { ESCROW_ADDRESS, getSeedPhrase, getSouqApiUrl } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 import { fetchFromIpfs } from "../ipfs.js";
 import { decrypt, deriveKeypairFromSeed, type EncryptedPackage } from "../encryption.js";
-import { getBufferedEvents } from "../relay.js";
+import { getBufferedEventsAsync } from "../relay.js";
 import { originalFetch } from "../x402-fetch-patch.js";
 
 const Schema = z.object({
@@ -84,7 +84,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<ReadDeliverableR
     let cid = params.clientDeliverableCid;
     if (!cid) {
       // 1. Check local event buffer
-      const events = getBufferedEvents();
+      const events = await getBufferedEventsAsync();
       const completeEvent = events
         .filter((e) => e.type === "job:completed" && e.jobId === params.jobId)
         .pop();

@@ -20,7 +20,7 @@ import {
   deriveKeypairFromSeed,
   type EncryptedPackage,
 } from "../encryption.js";
-import { findPubkeyByAddress, getBufferedEvents } from "../relay.js";
+import { findPubkeyByAddressAsync, getBufferedEventsAsync } from "../relay.js";
 
 const CompleteJobSchema = z.object({
   jobId: z.number().describe("The job ID to complete/approve."),
@@ -124,7 +124,7 @@ async function completeJobHandler(
     // Resolve deliverableCid (from param or auto-discover from notifications)
     let deliverableCid = params.deliverableCid;
     if (!deliverableCid) {
-      const events = getBufferedEvents();
+      const events = await getBufferedEventsAsync();
       const submitEvent = events.filter(e => e.type === "job:submitted" && e.jobId === params.jobId).pop();
       deliverableCid = (submitEvent?.data as Record<string, string>)?.deliverableCid;
       if (!deliverableCid) {
@@ -166,7 +166,7 @@ async function completeJobHandler(
     // Resolve client public key (from param or auto-discover from notifications)
     let clientPubKey: string | undefined = params.clientPublicKey;
     if (!clientPubKey) {
-      clientPubKey = findPubkeyByAddress(job.client) || undefined;
+      clientPubKey = await findPubkeyByAddressAsync(job.client) || undefined;
       if (!clientPubKey) {
         return { success: false, message: "Client's encryption public key not found. Either pass clientPublicKey or ensure the client has called setup_wallet." };
       }

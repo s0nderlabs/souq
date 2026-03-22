@@ -90,5 +90,11 @@ app.get("/relay/agents", async (c) => {
   return stub.fetch(c.req.raw);
 });
 
+// POST /relay/events — guaranteed event persistence
+app.post("/relay/events", async (c) => {
+  const stub = c.env.RELAY.get(c.env.RELAY.idFromName("souq-relay"));
+  return stub.fetch(c.req.raw);
+});
+
 export default { fetch: app.fetch };
 export { SouqRelay } from "./relay/ws";

@@ -7,7 +7,7 @@ import { formatUnits, zeroAddress } from "viem";
 import { getPublicClient } from "../protocol.js";
 import { ESCROW_ADDRESS, USDT_DECIMALS, getSouqApiUrl } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
-import { getBufferedEvents } from "../relay.js";
+import { getBufferedEventsAsync } from "../relay.js";
 import { originalFetch } from "../x402-fetch-patch.js";
 
 const GetJobSchema = z.object({
@@ -101,7 +101,7 @@ async function getJobHandler(
     let descriptionText: string = job.description;
     let descriptionResolved = false;
     // 1. Check local event buffer first
-    const localEvent = getBufferedEvents().filter(
+    const localEvent = (await getBufferedEventsAsync()).filter(
       (e) => e.type === "job:created" && e.jobId === params.jobId
     ).pop();
     if (localEvent?.data) {

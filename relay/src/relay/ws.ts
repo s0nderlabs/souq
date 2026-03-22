@@ -197,7 +197,13 @@ export class SouqRelay extends DurableObject<Env> {
       const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit") || 50), 200));
       const rows = this.ctx.storage.sql
         .exec(
-          "SELECT payload, MAX(ts) as ts FROM events WHERE type = 'agent:ready' GROUP BY json_extract(payload, '$.data.address') ORDER BY ts DESC LIMIT ?",
+          `SELECT payload, ts FROM events
+           WHERE type = 'agent:ready' AND rowid IN (
+             SELECT MAX(rowid) FROM events
+             WHERE type = 'agent:ready'
+             GROUP BY json_extract(payload, '$.data.address')
+           )
+           ORDER BY ts DESC LIMIT ?`,
           limit
         )
         .toArray();
@@ -219,6 +225,40 @@ export class SouqRelay extends DurableObject<Env> {
     }
 
     // WebSocket upgrade
+    // HTTP POST endpoint for guaranteed event persistence (WebSocket-independent)
+    if (request.method === "POST" && url.pathname === "/relay/events") {
+      try {
+        const body = await request.json() as {
+          type?: string;
+          jobId?: number;
+          from?: string;
+          timestamp?: number;
+          data?: Record<string, unknown>;
+        };
+        if (!body.type || !body.from) {
+          return Response.json({ error: "type and from required" }, { status: 400 });
+        }
+        const message = JSON.stringify(body);
+        const wallet = body.from.toLowerCase();
+
+        // Store for sender
+        this.storeEvent(wallet, body, message);
+
+        // Broadcast to all connected WebSockets (best-effort)
+        for (const conn of this.ctx.getWebSockets()) {
+          const tags = conn.deserializeAttachment?.() as string[] | null;
+          if (tags?.[0] && tags[0] !== wallet) {
+            conn.send(message);
+            this.storeEvent(tags[0], body, message);
+          }
+        }
+
+        return Response.json({ success: true });
+      } catch {
+        return Response.json({ error: "Invalid request body" }, { status: 400 });
+      }
+    }
+
     if (request.headers.get("Upgrade") !== "websocket") {
       return Response.json({ error: "Expected WebSocket" }, { status: 426 });
     }

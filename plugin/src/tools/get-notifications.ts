@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { getBufferedEvents, type RelayEvent } from "../relay.js";
+import { getBufferedEventsAsync, type RelayEvent } from "../relay.js";
 
 const Schema = z.object({
   since: z
@@ -20,7 +20,7 @@ export function registerGetNotifications(server: McpServer): void {
     Schema.shape,
     async (params) => {
       const p = params as z.infer<typeof Schema>;
-      const events = getBufferedEvents(p.since, p.limit);
+      const events = await getBufferedEventsAsync(p.since, p.limit);
 
       return {
         content: [{

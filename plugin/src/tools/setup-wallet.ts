@@ -11,7 +11,7 @@ import { usdtAbi } from "../abi/usdt.js";
 import { identityAbi } from "../abi/identity.js";
 import { deriveKeypairFromSeed } from "../encryption.js";
 import { pinJson, toIpfsUri } from "../ipfs.js";
-import { sendRelayEvent } from "../relay.js";
+import { sendRelayEvent, waitForRelay } from "../relay.js";
 
 const SetupWalletSchema = z.object({
   name: z.string().default("Souq Agent").describe("Agent display name"),
@@ -127,9 +127,11 @@ async function setupWalletHandler(
       }) as bigint;
 
       if (identityBalance > 0n) {
-        // Registered on-chain but not cached — scan Transfer events to recover agentId
+        // Registered on-chain but not cached — reverse-lookup via getAgentWallet
         let resolvedAgentId = "unknown";
         try {
+          // Strategy: scan recent IDs using getAgentWallet to find which one maps to our address
+          // First try Transfer event scan (fast if it works)
           const logs = await publicClient.getLogs({
             address: IDENTITY_REGISTRY,
             event: {
@@ -146,11 +148,45 @@ async function setupWalletHandler(
           });
           if (logs.length > 0 && logs[0].args.tokenId != null) {
             resolvedAgentId = logs[0].args.tokenId.toString();
-            cacheAgentId(resolvedAgentId, address);
-            console.error(`[souq] AgentId recovered from Transfer events: ${resolvedAgentId}`);
           }
-        } catch (logErr) {
-          console.error(`[souq] Transfer log scan failed (non-fatal): ${logErr instanceof Error ? logErr.message : logErr}`);
+        } catch {
+          // Transfer scan failed — try getAgentWallet reverse lookup
+        }
+
+        if (resolvedAgentId === "unknown") {
+          // WDK UserOps don't emit indexed events on the registry, so event scans fail.
+          // Reverse lookup: scan getAgentWallet(id) outward from a known anchor ID.
+          // This finds nearby registrations in 1-2 batches instead of scanning from 1.
+          console.error(`[souq] Event scan failed (WDK UserOp). Trying getAgentWallet reverse lookup...`);
+          const ANCHOR = 1996; // known valid ID from Provider agent
+          const RADIUS = 200; // search ±200 from anchor
+          const lo = Math.max(1, ANCHOR - RADIUS);
+          const hi = ANCHOR + RADIUS;
+          const calls: Promise<{ id: number; wallet: string | null }>[] = [];
+          for (let id = lo; id <= hi; id++) {
+            calls.push(
+              publicClient.readContract({
+                address: IDENTITY_REGISTRY,
+                abi: identityAbi,
+                functionName: "getAgentWallet",
+                args: [BigInt(id)],
+              })
+              .then((w) => ({ id, wallet: w as string }))
+              .catch(() => ({ id, wallet: null }))
+            );
+          }
+          const results = await Promise.all(calls);
+          for (const r of results) {
+            if (r.wallet && r.wallet.toLowerCase() === address.toLowerCase()) {
+              resolvedAgentId = r.id.toString();
+              break;
+            }
+          }
+        }
+
+        if (resolvedAgentId !== "unknown") {
+          cacheAgentId(resolvedAgentId, address);
+          console.error(`[souq] AgentId recovered: ${resolvedAgentId}`);
         }
         identityResult = { agentId: resolvedAgentId, status: "already_registered" };
         console.error(`[souq] Identity registered on-chain (agentId: ${resolvedAgentId})`);
@@ -205,6 +241,7 @@ async function setupWalletHandler(
     }
 
     // Broadcast agent:ready with pubkey so other agents can discover it
+    await waitForRelay(5000);
     sendRelayEvent({ type: "agent:ready", data: { address, encryptionPublicKey, agentId: identityResult?.agentId, name: params.name, capabilities: params.capabilities } });
 
     return {

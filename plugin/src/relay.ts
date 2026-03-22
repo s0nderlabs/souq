@@ -23,8 +23,10 @@ type RelayEventCallback = (event: RelayEvent) => void;
 let ws: WebSocket | null = null;
 let walletAddress: string | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let pingInterval: ReturnType<typeof setInterval> | null = null;
 let reconnectDelay = 1000;
 const MAX_RECONNECT_DELAY = 30000;
+const PING_INTERVAL = 30_000; // 30s heartbeat keeps Cloudflare DO connection alive
 const listeners: RelayEventCallback[] = [];
 const eventBuffer: RelayEvent[] = [];
 const MAX_BUFFER_SIZE = 100;
@@ -46,6 +48,13 @@ export function connectRelay(wallet: string): void {
 
     ws.on("open", () => {
       reconnectDelay = 1000; // reset on success
+      // Heartbeat to keep Cloudflare DO connection alive
+      if (pingInterval) clearInterval(pingInterval);
+      pingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send("ping");
+        }
+      }, PING_INTERVAL);
       console.error(`[souq] Relay connected: ${wallet.slice(0, 10)}...`);
 
       // Fetch missed events from DO SQLite (persisted while disconnected)
@@ -89,6 +98,7 @@ export function connectRelay(wallet: string): void {
 
     ws.on("close", () => {
       ws = null;
+      if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
       scheduleReconnect();
     });
 
@@ -115,6 +125,24 @@ function scheduleReconnect(): void {
   reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
 }
 
+// ── Wait for connection ──
+
+export function waitForRelay(timeoutMs = 5000): Promise<boolean> {
+  if (ws && ws.readyState === WebSocket.OPEN) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const check = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        clearInterval(check);
+        resolve(true);
+      } else if (Date.now() - start > timeoutMs) {
+        clearInterval(check);
+        resolve(false);
+      }
+    }, 100);
+  });
+}
+
 // ── Send Event ──
 
 export function sendRelayEvent(event: Omit<RelayEvent, "from" | "timestamp">): void {
@@ -130,13 +158,27 @@ export function sendRelayEvent(event: Omit<RelayEvent, "from" | "timestamp">): v
     eventBuffer.shift();
   }
 
-  // Broadcast to relay (fire-and-forget)
+  // WebSocket broadcast (fast, best-effort)
+  let wsSent = false;
   if (ws && ws.readyState === WebSocket.OPEN) {
     try {
       ws.send(JSON.stringify(fullEvent));
+      wsSent = true;
     } catch {
-      // Relay broadcast failure is non-fatal
+      // WebSocket send failed — HTTP fallback below
     }
+  }
+
+  // HTTP POST fallback — only when WS failed (avoids duplicate storage)
+  if (!wsSent) {
+    const apiUrl = getSouqApiUrl();
+    fetch(`${apiUrl}/relay/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fullEvent),
+    }).catch(() => {
+      console.error(`[souq] Event ${fullEvent.type} lost — both WS and HTTP failed`);
+    });
   }
 }
 
@@ -155,15 +197,75 @@ export function getBufferedEvents(since?: number, limit = 50): RelayEvent[] {
   return events.slice(-limit);
 }
 
+/** Async version — tries buffer first, falls back to relay API for persistent events */
+export async function getBufferedEventsAsync(since?: number, limit = 50): Promise<RelayEvent[]> {
+  const local = getBufferedEvents(since, limit);
+  if (local.length > 0) return local;
+
+  // Buffer is warm but nothing matched the filter — no API call needed
+  if (eventBuffer.length > 0) return [];
+
+  // Buffer truly empty (cold start) — fetch from relay API
+  if (!walletAddress) return [];
+  try {
+    const apiUrl = getSouqApiUrl();
+    const params = new URLSearchParams({ wallet: walletAddress, limit: String(limit) });
+    if (since) params.set("since", String(since));
+    const res = await fetch(`${apiUrl}/relay/events?${params}`);
+    if (!res.ok) return [];
+    const events = await res.json() as RelayEvent[];
+    // Backfill buffer so future sync calls work
+    for (const e of events) {
+      eventBuffer.push(e);
+      if (eventBuffer.length > MAX_BUFFER_SIZE) eventBuffer.shift();
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
 // ── Pubkey Lookup ──
 
 export function findPubkeyByAddress(address: string): string | null {
   const addr = address.toLowerCase();
+  // Check local buffer first (fastest)
   for (let i = eventBuffer.length - 1; i >= 0; i--) {
     const e = eventBuffer[i];
     if (e.type === "agent:ready" && e.from.toLowerCase() === addr) {
       return (e.data as Record<string, string>)?.encryptionPublicKey || null;
     }
+  }
+  return null;
+}
+
+/** Async pubkey lookup — tries buffer first, then queries relay API as fallback */
+export async function findPubkeyByAddressAsync(address: string): Promise<string | null> {
+  // Try local buffer first
+  const cached = findPubkeyByAddress(address);
+  if (cached) return cached;
+
+  // Fallback: query relay /relay/agents (persistent, survives reconnects)
+  try {
+    const apiUrl = getSouqApiUrl();
+    const res = await fetch(`${apiUrl}/relay/agents?limit=100`);
+    if (!res.ok) return null;
+    const data = await res.json() as { agents: Array<{ address: string; encryptionPublicKey: string | null }> };
+    const agent = data.agents.find(
+      (a) => a.address.toLowerCase() === address.toLowerCase()
+    );
+    if (agent?.encryptionPublicKey) {
+      // Cache it in the buffer so future lookups are instant
+      eventBuffer.push({
+        type: "agent:ready",
+        from: agent.address,
+        timestamp: Date.now(),
+        data: { address: agent.address, encryptionPublicKey: agent.encryptionPublicKey },
+      });
+      return agent.encryptionPublicKey;
+    }
+  } catch {
+    // Non-fatal
   }
   return null;
 }
