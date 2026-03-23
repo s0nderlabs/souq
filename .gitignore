@@ -11,3 +11,4 @@ contracts/lib/
 contracts/out/
 contracts/cache/
 relay/.next/
+scripts/
