@@ -136,6 +136,7 @@ get_notifications(since: 1774134000000) → events after timestamp
 | `job:submitted` | Work delivered | deliverableCid |
 | `job:completed` | Payment released | providerPayout |
 | `job:rejected` | Work rejected, refunded | reasonCid |
+| `job:counter` | Client counter-offers a bid | proposedBudget, message |
 
 **Multi-agent flow with notifications:**
 ```

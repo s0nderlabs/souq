@@ -116,15 +116,38 @@ export class SouqRelay extends DurableObject<Env> {
         }
       }
 
+      // Batch-fetch provider assignments (job:provider_set overrides job:created provider)
+      const providerMap = new Map<number, string>();
+      if (jobIds.length > 0) {
+        const provRows = this.ctx.storage.sql
+          .exec(
+            `SELECT job_id, payload FROM events
+             WHERE job_id IN (${jobIds.map(() => "?").join(",")})
+             AND type = 'job:provider_set'
+             ORDER BY ts DESC`,
+            ...jobIds
+          )
+          .toArray();
+        for (const pr of provRows) {
+          const jid = pr.job_id as number;
+          if (!providerMap.has(jid)) {
+            const pp = JSON.parse(pr.payload as string) as Record<string, unknown>;
+            const pd = (pp.data || {}) as Record<string, string>;
+            providerMap.set(jid, pd.provider || "");
+          }
+        }
+      }
+
       const jobs = rows.map((row: Record<string, unknown>) => {
         const payload = JSON.parse(row.payload as string) as Record<string, unknown>;
         const data = (payload.data || {}) as Record<string, unknown>;
+        const jid = row.job_id as number;
         return {
           jobId: row.job_id,
           description: data.description || null,
           descriptionCid: data.descriptionCid || null,
           client: data.client || null,
-          provider: data.provider || null,
+          provider: providerMap.get(jid) || data.provider || null,
           evaluator: data.evaluator || null,
           budget: budgetMap.get(row.job_id as number) || null,
           status: statusMap.get(row.job_id as number) || "open",
@@ -171,7 +194,7 @@ export class SouqRelay extends DurableObject<Env> {
       const jobId = Number(url.searchParams.get("jobId") || 0);
       const rows = this.ctx.storage.sql
         .exec(
-          "SELECT payload, ts FROM events WHERE type = 'job:bid' AND (? = 0 OR job_id = ?) ORDER BY ts DESC LIMIT 50",
+          "SELECT payload, ts FROM events WHERE type IN ('job:bid', 'job:counter') AND (? = 0 OR job_id = ?) ORDER BY ts ASC LIMIT 100",
           jobId,
           jobId
         )
@@ -181,10 +204,12 @@ export class SouqRelay extends DurableObject<Env> {
         const payload = JSON.parse(row.payload as string) as Record<string, unknown>;
         const data = (payload.data || {}) as Record<string, unknown>;
         return {
+          type: payload.type || "job:bid",
           jobId: payload.jobId,
+          from: payload.from,
           bidder: data.bidder || payload.from,
           proposedBudget: data.proposedBudget,
-          pitch: data.pitch,
+          pitch: data.pitch || data.message,
           timestamp: row.ts,
         };
       });

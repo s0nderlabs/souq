@@ -27,7 +27,9 @@ export const relay = {
   bids: (jobId: number) =>
     fetch(`${API_URL}/relay/bids?jobId=${jobId}`).then((r) => r.json()) as Promise<{
       bids: Array<{
+        type: string;
         jobId: number;
+        from: string;
         bidder: string;
         proposedBudget: string;
         pitch: string;

@@ -4,6 +4,7 @@ import { use, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useReadContract, usePublicClient, useWalletClient, useAccount } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { parseUnits } from "viem";
 import { useJob, useBids } from "@/hooks/use-job";
 import { StatusBadge } from "@/components/status-badge";
@@ -61,11 +62,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const { data: jobData, isLoading: jobLoading } = useJob(jobId);
   const { data: bidData } = useBids(jobId);
   const { address: userAddress } = useAccount();
+  const queryClient = useQueryClient();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const [actionStep, setActionStep] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [budgetInput, setBudgetInput] = useState("");
+  const [counterBidder, setCounterBidder] = useState<string | null>(null);
+  const [counterAmount, setCounterAmount] = useState("");
+  const [counterMessage, setCounterMessage] = useState("");
   const { derive, isReady: encryptionReady, privateKey: encPrivateKey } = useEncryption();
   const [deliverableText, setDeliverableText] = useState<string | null>(null);
   const [deliverableLoading, setDeliverableLoading] = useState(false);
@@ -120,7 +125,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const status = (latestEvent?.type?.replace("job:", "") || "open").toLowerCase();
 
   const client = (createdEvent?.data?.client as string) || null;
-  const provider = (createdEvent?.data?.provider as string) || null;
+  const providerSetEvent = timeline.find((e) => e.type === "job:provider_set");
+  const provider = (providerSetEvent?.data?.provider as string) || (createdEvent?.data?.provider as string) || null;
   const evaluator = (createdEvent?.data?.evaluator as string) || null;
   const budgetEvent = timeline.find((e) => e.type === "job:budget_set");
   const budget = (budgetEvent?.data?.amount as string) || null;
@@ -318,10 +324,193 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           );
         })()}
 
+        {/* Bids & Negotiation — shown BEFORE job actions so client can accept first */}
+        {showBids && (
+          <motion.div variants={fadeUp} className="mb-6">
+            <h2 className="font-display italic text-lg text-ink mb-3">Bids</h2>
+            {bids.length === 0 ? (
+              <div className="rounded-2xl border border-border p-5 text-center">
+                <p className="font-serif text-ink-light text-sm">No bids yet. Agents can apply via MCP.</p>
+              </div>
+            ) : (() => {
+              // Group bids+counters into negotiation threads per bidder
+              const threads = new Map<string, typeof bids>();
+              for (const b of bids) {
+                const key = b.bidder?.toLowerCase() || b.from?.toLowerCase() || "";
+                if (!threads.has(key)) threads.set(key, []);
+                threads.get(key)!.push(b);
+              }
+              const isClient = userAddress && client && userAddress.toLowerCase() === client.toLowerCase();
+
+              return (
+                <div className="space-y-3">
+                  {[...threads.entries()].map(([bidderAddr, thread]) => (
+                    <div key={bidderAddr} className="rounded-xl border border-border p-4">
+                      {/* Bidder header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <Address value={thread[0].bidder || bidderAddr} />
+                      </div>
+
+                      {/* Negotiation thread */}
+                      <div className="space-y-2">
+                        {thread.map((msg, i) => {
+                          const isCounter = msg.type === "job:counter";
+                          const fromClient = msg.from?.toLowerCase() === client?.toLowerCase();
+                          const isBid = !isCounter && !fromClient;
+                          return (
+                            <div key={i} className={`rounded-lg p-3 ${isCounter ? "bg-clay/[0.06] border border-clay/15" : "bg-cream-dark/50"}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-mono text-[10px] text-ink-light/50">
+                                  {fromClient ? "Client" : "Provider"} {isCounter ? "countered" : "bid"}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-[13px] text-ink tabular-nums">
+                                    {msg.proposedBudget} <span className="text-[11px] text-ink-light">USDT</span>
+                                  </span>
+                                  {isClient && isBid && (
+                                    <button
+                                      onClick={async () => {
+                                        if (!walletClient || !publicClient) return;
+                                        setActionError(null);
+                                        setActionStep("Accepting bid...");
+                                        try {
+                                          const addr = (msg.bidder || bidderAddr) as `0x${string}`;
+                                          const bidAmount = parseUnits(msg.proposedBudget, USDT_DECIMALS);
+
+                                          // 1. Set provider
+                                          const provHash = await walletClient.writeContract({
+                                            address: ESCROW_ADDRESS, abi: escrowAbi, functionName: "setProvider",
+                                            args: [BigInt(jobId), addr, "0x"],
+                                          });
+                                          await publicClient.waitForTransactionReceipt({ hash: provHash });
+                                          await sendRelayEventAsync({ type: "job:provider_set", jobId, data: { provider: addr } });
+
+                                          // 2. Set budget to bid amount
+                                          setActionStep("Setting budget...");
+                                          const budgetHash = await walletClient.writeContract({
+                                            address: ESCROW_ADDRESS, abi: escrowAbi, functionName: "setBudget",
+                                            args: [BigInt(jobId), bidAmount, "0x"],
+                                          });
+                                          await publicClient.waitForTransactionReceipt({ hash: budgetHash });
+                                          await sendRelayEventAsync({ type: "job:budget_set", jobId, data: { amount: msg.proposedBudget } });
+
+                                          // 3. Approve USDT
+                                          setActionStep("Approving USDT...");
+                                          const approveHash = await walletClient.writeContract({
+                                            address: USDT_ADDRESS, abi: usdtAbi, functionName: "approve",
+                                            args: [ESCROW_ADDRESS, bidAmount],
+                                          });
+                                          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+
+                                          // 4. Fund
+                                          setActionStep("Funding escrow...");
+                                          const fundHash = await walletClient.writeContract({
+                                            address: ESCROW_ADDRESS, abi: escrowAbi, functionName: "fund",
+                                            args: [BigInt(jobId), bidAmount, "0x"],
+                                          });
+                                          await publicClient.waitForTransactionReceipt({ hash: fundHash });
+                                          await sendRelayEventAsync({ type: "job:funded", jobId, data: { budget: msg.proposedBudget } });
+
+                                          setActionStep(null);
+                                          queryClient.invalidateQueries({ queryKey: ["job", jobId] }); queryClient.invalidateQueries({ queryKey: ["bids", jobId] }); queryClient.invalidateQueries({ queryKey: ["jobs"] });
+                                        } catch (e) {
+                                          const msg2 = e instanceof Error ? e.message : "Failed";
+                                          setActionError(msg2.includes("rejected") ? "Transaction rejected." : msg2.slice(0, 100));
+                                          setActionStep(null);
+                                        }
+                                      }}
+                                      disabled={!!actionStep}
+                                      className="px-3 py-1 rounded-full bg-clay text-cream font-serif text-[11px] hover:bg-clay-light transition-colors duration-200"
+                                    >
+                                      {actionStep ? "..." : "Accept"}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              {msg.pitch && (
+                                <p className="font-serif text-[12px] text-ink-light leading-relaxed">{msg.pitch}</p>
+                              )}
+                              <p className="font-mono text-[9px] text-ink-light/30 mt-1">{timeAgo(msg.timestamp)}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Counter-offer form (client only) */}
+                      {isClient && (
+                        <div className="mt-3">
+                          {counterBidder === bidderAddr ? (
+                            <div className="space-y-2">
+                              <div className="flex gap-2">
+                                <input
+                                  value={counterAmount}
+                                  onChange={(e) => setCounterAmount(e.target.value)}
+                                  type="number"
+                                  placeholder="Your price"
+                                  className="flex-1 px-3 py-2 rounded-lg border border-ink-light/20 bg-transparent font-mono text-[13px] text-ink placeholder:text-ink-light/30 focus:outline-none focus:border-clay/40"
+                                />
+                                <span className="font-mono text-[11px] text-ink-light self-center">USDT</span>
+                              </div>
+                              <input
+                                value={counterMessage}
+                                onChange={(e) => setCounterMessage(e.target.value)}
+                                placeholder="Message (optional)"
+                                className="w-full px-3 py-2 rounded-lg border border-ink-light/20 bg-transparent font-serif text-[12px] text-ink placeholder:text-ink-light/30 focus:outline-none focus:border-clay/40"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={async () => {
+                                    if (!counterAmount || Number(counterAmount) <= 0) return;
+                                    await sendRelayEventAsync({
+                                      type: "job:counter",
+                                      jobId,
+                                      to: thread[0].bidder || bidderAddr,
+                                      data: {
+                                        proposedBudget: counterAmount,
+                                        message: counterMessage || undefined,
+                                        bidder: thread[0].bidder || bidderAddr,
+                                        client: userAddress,
+                                      },
+                                    });
+                                    setCounterBidder(null);
+                                    setCounterAmount("");
+                                    setCounterMessage("");
+                                    queryClient.invalidateQueries({ queryKey: ["job", jobId] }); queryClient.invalidateQueries({ queryKey: ["bids", jobId] }); queryClient.invalidateQueries({ queryKey: ["jobs"] });
+                                  }}
+                                  className="px-4 py-1.5 rounded-full bg-clay text-cream font-serif text-[12px] hover:bg-clay-light transition-colors duration-200"
+                                >
+                                  Send Counter
+                                </button>
+                                <button
+                                  onClick={() => { setCounterBidder(null); setCounterAmount(""); setCounterMessage(""); }}
+                                  className="px-4 py-1.5 rounded-full border border-border font-serif text-[12px] text-ink-light hover:text-ink transition-colors duration-200"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setCounterBidder(bidderAddr)}
+                              className="font-serif text-[12px] text-clay hover:text-clay-light transition-colors duration-200"
+                            >
+                              Counter-offer
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </motion.div>
+        )}
+
         {/* Job Actions — resume interrupted flow */}
         {(() => {
-          // Only show to the job client
           const isClient = userAddress && client && userAddress.toLowerCase() === client.toLowerCase();
+          const hasProvider = provider && !isZeroAddress(provider);
           const needsBudget = actualStatus === "open" && !budget;
           const needsFunding = actualStatus === "open" && budget;
 
@@ -332,14 +521,30 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             setActionError(null);
 
             try {
-              if (needsBudget) {
+              if (!hasProvider) {
+                // No provider — only set budget (proposed price), no fund
+                if (!budgetInput || Number(budgetInput) <= 0) {
+                  setActionError("Enter a budget amount.");
+                  return;
+                }
+                const amount = parseUnits(budgetInput, USDT_DECIMALS);
+                setActionStep("Setting proposed price...");
+                const hash = await walletClient.writeContract({
+                  address: ESCROW_ADDRESS, abi: escrowAbi, functionName: "setBudget",
+                  args: [BigInt(jobId), amount, "0x"],
+                });
+                await publicClient.waitForTransactionReceipt({ hash });
+                await sendRelayEventAsync({ type: "job:budget_set", jobId, data: { amount: budgetInput } });
+                setActionStep(null);
+                queryClient.invalidateQueries({ queryKey: ["job", jobId] }); queryClient.invalidateQueries({ queryKey: ["bids", jobId] }); queryClient.invalidateQueries({ queryKey: ["jobs"] });
+              } else if (needsBudget) {
+                // Has provider, no budget — full flow
                 if (!budgetInput || Number(budgetInput) <= 0) {
                   setActionError("Enter a budget amount.");
                   return;
                 }
                 const amount = parseUnits(budgetInput, USDT_DECIMALS);
 
-                // Set Budget
                 setActionStep("Setting budget...");
                 const budgetHash = await walletClient.writeContract({
                   address: ESCROW_ADDRESS, abi: escrowAbi, functionName: "setBudget",
@@ -347,7 +552,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 });
                 await publicClient.waitForTransactionReceipt({ hash: budgetHash });
 
-                // Approve
                 setActionStep("Approving USDT...");
                 const approveHash = await walletClient.writeContract({
                   address: USDT_ADDRESS, abi: usdtAbi, functionName: "approve",
@@ -355,7 +559,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 });
                 await publicClient.waitForTransactionReceipt({ hash: approveHash });
 
-                // Fund
                 setActionStep("Funding escrow...");
                 const fundHash = await walletClient.writeContract({
                   address: ESCROW_ADDRESS, abi: escrowAbi, functionName: "fund",
@@ -363,14 +566,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 });
                 await publicClient.waitForTransactionReceipt({ hash: fundHash });
 
-                // Broadcast
                 await sendRelayEventAsync({ type: "job:budget_set", jobId, data: { amount: budgetInput } });
                 await sendRelayEventAsync({ type: "job:funded", jobId, data: { budget: budgetInput } });
-
                 setActionStep(null);
-                window.location.reload();
+                queryClient.invalidateQueries({ queryKey: ["job", jobId] }); queryClient.invalidateQueries({ queryKey: ["bids", jobId] }); queryClient.invalidateQueries({ queryKey: ["jobs"] });
               } else if (needsFunding) {
-                // Budget already set, just approve + fund
+                // Has provider, has budget — approve + fund only
                 const onChainBudget = onChainJob ? (onChainJob as unknown as unknown[])[3] as bigint : parseUnits(budget!, USDT_DECIMALS);
 
                 setActionStep("Approving USDT...");
@@ -388,9 +589,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 await publicClient.waitForTransactionReceipt({ hash: fundHash });
 
                 await sendRelayEventAsync({ type: "job:funded", jobId, data: { budget: budget! } });
-
                 setActionStep(null);
-                window.location.reload();
+                queryClient.invalidateQueries({ queryKey: ["job", jobId] }); queryClient.invalidateQueries({ queryKey: ["bids", jobId] }); queryClient.invalidateQueries({ queryKey: ["jobs"] });
               }
             } catch (e) {
               const msg = e instanceof Error ? e.message : "Failed";
@@ -402,12 +602,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           return (
             <motion.div variants={fadeUp} className="rounded-2xl border border-clay/30 bg-clay/[0.03] p-5 mb-6">
               <h2 className="font-display italic text-lg text-ink mb-3">
-                {needsBudget ? "Set Budget & Fund" : "Fund Job"}
+                {!hasProvider ? "Set Proposed Price" : needsBudget ? "Set Budget & Fund" : "Fund Job"}
               </h2>
 
-              {needsBudget && (
+              {!hasProvider && (
+                <p className="font-serif text-[11px] text-ink-light/50 mb-3">
+                  Set a proposed price for agents to accept or counter-bid. Assign a provider from the bids above to fund.
+                </p>
+              )}
+
+              {(needsBudget || !hasProvider) && (
                 <div className="mb-4">
-                  <label className="font-mono text-[11px] text-ink-light tracking-wide block mb-2">Budget (USDT)</label>
+                  <label className="font-mono text-[11px] text-ink-light tracking-wide block mb-2">
+                    {hasProvider ? "Budget (USDT)" : "Proposed Price (USDT)"}
+                  </label>
                   <input
                     value={budgetInput}
                     onChange={(e) => setBudgetInput(e.target.value)}
@@ -418,7 +626,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 </div>
               )}
 
-              {needsFunding && !needsBudget && (
+              {needsFunding && hasProvider && (
                 <p className="font-serif text-[13px] text-ink-light mb-4">
                   Budget is set to {budget} USDT. Approve and fund the escrow to activate this job.
                 </p>
@@ -438,38 +646,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     <span className="w-4 h-4 border-2 border-cream/30 border-t-cream rounded-full animate-spin" />
                     {actionStep}
                   </span>
-                ) : needsBudget ? "Set Budget & Fund" : "Approve & Fund"}
+                ) : !hasProvider ? "Set Proposed Price" : needsBudget ? "Set Budget & Fund" : "Approve & Fund"}
               </button>
             </motion.div>
           );
         })()}
-
-        {/* Bids (Type 2 open jobs) */}
-        {showBids && (
-          <motion.div variants={fadeUp} className="mb-6">
-            <h2 className="font-display italic text-lg text-ink mb-3">Bids</h2>
-            {bids.length === 0 ? (
-              <div className="rounded-2xl border border-border p-5 text-center">
-                <p className="font-serif text-ink-light text-sm">No bids yet. Agents can apply via MCP.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {bids.map((bid, i) => (
-                  <div key={i} className="rounded-xl border border-border p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <Address value={bid.bidder} />
-                      <span className="font-mono text-[13px] text-ink tabular-nums">
-                        {bid.proposedBudget} <span className="text-[11px] text-ink-light">USDT</span>
-                      </span>
-                    </div>
-                    <p className="font-serif text-[13px] text-ink-light leading-relaxed">{bid.pitch}</p>
-                    <p className="font-mono text-[10px] text-ink-light/40 mt-2">{timeAgo(bid.timestamp)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </motion.div>
-        )}
 
         {/* Timeline */}
         <motion.div variants={fadeUp}>

@@ -6,6 +6,7 @@ export interface RelayEvent {
   type: string;
   jobId?: number;
   from: string;
+  to?: string;
   timestamp: number;
   data?: Record<string, unknown>;
 }
