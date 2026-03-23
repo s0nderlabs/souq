@@ -93,7 +93,8 @@ export default function CreateJobPage() {
     }
 
     setError(null);
-    const budgetAmount = jobType === "direct" ? parseUnits(budget, USDT_DECIMALS) : BigInt(0);
+    const hasBudget = budget.trim() && Number(budget) > 0;
+    const budgetAmount = hasBudget ? parseUnits(budget, USDT_DECIMALS) : BigInt(0);
     const descHash = keccak256(toHex(description));
     const expiry = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 3600);
     const providerAddr = jobType === "direct" ? (provider as `0x${string}`) : zeroAddress;
@@ -130,7 +131,18 @@ export default function CreateJobPage() {
       if (!parsedJobId) throw new Error("Failed to parse jobId from receipt");
       setJobId(parsedJobId);
 
-      // Open Market: skip budget/approve/fund — agents bid first, fund later from job detail
+      // Open Market with budget: set proposed price, skip approve/fund (fund after provider assigned)
+      // Open Market without budget: skip everything (agents propose their own price)
+      if (jobType === "open" && hasBudget) {
+        setStep("setting_budget");
+        await walletClient.writeContract({
+          address: ESCROW_ADDRESS,
+          abi: escrowAbi,
+          functionName: "setBudget",
+          args: [BigInt(parsedJobId), budgetAmount, "0x"],
+        }).then((h) => publicClient.waitForTransactionReceipt({ hash: h }));
+      }
+
       if (jobType === "direct") {
         // Step 2: Set Budget
         setStep("setting_budget");
@@ -400,7 +412,14 @@ export default function CreateJobPage() {
 
             {/* Budget */}
             <motion.div variants={fadeUp} className="mb-5">
-              <label className="font-mono text-[11px] text-ink-light tracking-wide block mb-2">Budget (USDT)</label>
+              <label className="font-mono text-[11px] text-ink-light tracking-wide block mb-2">
+                {jobType === "direct" ? "Budget (USDT)" : "Proposed Price (USDT)"}
+              </label>
+              {jobType === "open" && (
+                <p className="font-serif text-[11px] text-ink-light/50 mb-2">
+                  Optional. Set your price and agents can accept or counter-bid.
+                </p>
+              )}
               <input
                 value={budget}
                 onChange={(e) => setBudget(e.target.value)}
@@ -451,7 +470,7 @@ export default function CreateJobPage() {
             {jobType === "open" && (
               <motion.div variants={fadeUp} className="mb-6 rounded-xl border border-clay/20 bg-clay/[0.04] p-4">
                 <p className="font-serif text-[13px] text-ink-light leading-relaxed">
-                  Open Market jobs have no assigned provider. Agents can discover and bid on this job via MCP.
+                  Open Market jobs have no assigned provider. Agents discover this job via MCP and bid with their own proposed price. You can also set a proposed price above that agents can accept or counter-bid.
                 </p>
               </motion.div>
             )}
@@ -471,7 +490,7 @@ export default function CreateJobPage() {
                 {step === "error" ? "Try Again" : jobType === "direct" ? "Create & Fund Job" : "Post Job"}
               </button>
               <p className="font-serif text-[12px] text-ink-light/40 text-center mt-3">
-                {jobType === "direct" ? "4 transactions: Create, Set Budget, Approve USDT, Fund Escrow." : "1 transaction: Create job on-chain."}
+                {jobType === "direct" ? "4 transactions: Create, Set Budget, Approve USDT, Fund Escrow." : "1-2 transactions: Create job, optionally set proposed price."}
               </p>
             </motion.div>
           </>
