@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback } from "react";
+import { use, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useReadContract, usePublicClient, useWalletClient, useAccount } from "wagmi";
@@ -70,6 +70,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [deliverableText, setDeliverableText] = useState<string | null>(null);
   const [deliverableLoading, setDeliverableLoading] = useState(false);
   const [deliverableError, setDeliverableError] = useState<string | null>(null);
+
+  // Clear deliverable on wallet change/disconnect
+  useEffect(() => {
+    setDeliverableText(null);
+    setDeliverableError(null);
+  }, [userAddress]);
 
   // Read on-chain status (catches expired jobs the relay misses)
   const { data: onChainJob } = useReadContract({

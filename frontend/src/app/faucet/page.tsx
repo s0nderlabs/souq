@@ -25,8 +25,8 @@ export default function FaucetPage() {
   const { wallets } = useWallets();
   const chainId = useChainId();
 
-  // Privy wallet address — works for both embedded and external wallets
-  const address = wagmiAddress || user?.wallet?.address;
+  // Privy wallet address first — always correct for current session
+  const address = user?.wallet?.address || wagmiAddress;
   const isWrongChain = chainId !== sepolia.id;
 
   const handleSwitchChain = async () => {

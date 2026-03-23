@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { connectRelay, disconnectRelay, onRelayEvent, sendRelayEventAsync } from "@/lib/websocket";
 import type { RelayEvent } from "@/lib/websocket";
 import { deriveEncryptionKeypair, getCachedKeypair, clearKeypair } from "@/lib/encryption";
+import { API_URL } from "@/lib/contracts";
 
 export function useRelay() {
   const { authenticated, ready, user } = usePrivy();
@@ -15,6 +16,7 @@ export function useRelay() {
   const queryClient = useQueryClient();
   const connectedRef = useRef(false);
   const derivingRef = useRef(false);
+  const faucetClaimedRef = useRef(false);
 
   const walletAddress = address || user?.wallet?.address;
 
@@ -66,9 +68,24 @@ export function useRelay() {
           data: { address: walletAddress, encryptionPublicKey: kp.publicKeyHex },
         });
         console.log("[souq] Encryption pubkey broadcast to relay");
+
+        // Auto-claim faucet for new users
+        if (!faucetClaimedRef.current && walletAddress) {
+          faucetClaimedRef.current = true;
+          fetch(`${API_URL}/faucet`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address: walletAddress }),
+          })
+            .then((r) => r.json())
+            .then((d: { success?: boolean }) => {
+              if (d.success) console.log("[souq] Auto-claimed faucet tokens");
+            })
+            .catch(() => {}); // non-fatal
+        }
       } catch (e) {
         console.warn("[souq] Encryption keypair derivation skipped:", e);
-        derivingRef.current = false; // allow retry on next render
+        derivingRef.current = false;
       }
     }, 2000);
 

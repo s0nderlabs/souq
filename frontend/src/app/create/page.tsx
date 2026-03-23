@@ -84,7 +84,7 @@ export default function CreateJobPage() {
     if (!description.trim()) missing.push("Description");
     if (!evaluator.trim()) missing.push("Evaluator Address");
     if (jobType === "direct" && !provider.trim()) missing.push("Provider Address");
-    if (!budget.trim() || Number(budget) <= 0) missing.push("Budget");
+    if (jobType === "direct" && (!budget.trim() || Number(budget) <= 0)) missing.push("Budget");
     if (enableCompliance && !policyId.trim()) missing.push("Policy ID");
 
     if (missing.length > 0) {
@@ -93,7 +93,7 @@ export default function CreateJobPage() {
     }
 
     setError(null);
-    const budgetAmount = parseUnits(budget, USDT_DECIMALS);
+    const budgetAmount = jobType === "direct" ? parseUnits(budget, USDT_DECIMALS) : BigInt(0);
     const descHash = keccak256(toHex(description));
     const expiry = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 3600);
     const providerAddr = jobType === "direct" ? (provider as `0x${string}`) : zeroAddress;
@@ -130,35 +130,38 @@ export default function CreateJobPage() {
       if (!parsedJobId) throw new Error("Failed to parse jobId from receipt");
       setJobId(parsedJobId);
 
-      // Step 2: Set Budget
-      setStep("setting_budget");
-      const budgetHash = await walletClient.writeContract({
-        address: ESCROW_ADDRESS,
-        abi: escrowAbi,
-        functionName: "setBudget",
-        args: [BigInt(parsedJobId), budgetAmount, "0x"],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: budgetHash });
+      // Open Market: skip budget/approve/fund — agents bid first, fund later from job detail
+      if (jobType === "direct") {
+        // Step 2: Set Budget
+        setStep("setting_budget");
+        const budgetHash = await walletClient.writeContract({
+          address: ESCROW_ADDRESS,
+          abi: escrowAbi,
+          functionName: "setBudget",
+          args: [BigInt(parsedJobId), budgetAmount, "0x"],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: budgetHash });
 
-      // Step 3: Approve USDT
-      setStep("approving");
-      const approveHash = await walletClient.writeContract({
-        address: USDT_ADDRESS,
-        abi: usdtAbi,
-        functionName: "approve",
-        args: [ESCROW_ADDRESS, budgetAmount],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        // Step 3: Approve USDT
+        setStep("approving");
+        const approveHash = await walletClient.writeContract({
+          address: USDT_ADDRESS,
+          abi: usdtAbi,
+          functionName: "approve",
+          args: [ESCROW_ADDRESS, budgetAmount],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: approveHash });
 
-      // Step 4: Fund Escrow
-      setStep("funding");
-      const fundHash = await walletClient.writeContract({
-        address: ESCROW_ADDRESS,
-        abi: escrowAbi,
-        functionName: "fund",
-        args: [BigInt(parsedJobId), budgetAmount, "0x"],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: fundHash });
+        // Step 4: Fund Escrow
+        setStep("funding");
+        const fundHash = await walletClient.writeContract({
+          address: ESCROW_ADDRESS,
+          abi: escrowAbi,
+          functionName: "fund",
+          args: [BigInt(parsedJobId), budgetAmount, "0x"],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: fundHash });
+      }
 
       // Step 5: Broadcast relay event
       setStep("broadcasting");
@@ -175,17 +178,18 @@ export default function CreateJobPage() {
           txHash: createHash,
         },
       });
-      // Also broadcast budget_set and funded
-      await sendRelayEventAsync({
-        type: "job:budget_set",
-        jobId: parsedJobId,
-        data: { amount: budget, txHash: budgetHash },
-      });
-      await sendRelayEventAsync({
-        type: "job:funded",
-        jobId: parsedJobId,
-        data: { budget, txHash: fundHash },
-      });
+      if (jobType === "direct") {
+        await sendRelayEventAsync({
+          type: "job:budget_set",
+          jobId: parsedJobId,
+          data: { amount: budget },
+        });
+        await sendRelayEventAsync({
+          type: "job:funded",
+          jobId: parsedJobId,
+          data: { budget },
+        });
+      }
 
       setStep("done");
     } catch (e) {
@@ -273,9 +277,13 @@ export default function CreateJobPage() {
               <circle cx="12" cy="12" r="10" />
               <path d="M8 12l2.5 2.5L16 9" />
             </svg>
-            <p className="font-display italic text-xl text-ink mb-2">Job Created & Funded</p>
+            <p className="font-display italic text-xl text-ink mb-2">
+              {jobType === "direct" ? "Job Created & Funded" : "Job Posted"}
+            </p>
             <p className="font-serif text-ink-light text-sm mb-2">
-              Job #{jobId} is live and funded with {budget} USDT.
+              {jobType === "direct"
+                ? `Job #${jobId} is live and funded with ${budget} USDT.`
+                : `Job #${jobId} is posted. Agents can bid via MCP. Fund after assigning a provider.`}
             </p>
             <p className="font-serif text-[12px] text-ink-light/50 mb-6">
               Agents have been notified and can start working.
@@ -460,10 +468,10 @@ export default function CreateJobPage() {
                 onClick={handleCreate}
                 className="w-full py-3 rounded-full bg-clay text-cream font-serif text-[15px] tracking-wide hover:bg-clay-light transition-colors duration-200"
               >
-                {step === "error" ? "Try Again" : "Create & Fund Job"}
+                {step === "error" ? "Try Again" : jobType === "direct" ? "Create & Fund Job" : "Post Job"}
               </button>
               <p className="font-serif text-[12px] text-ink-light/40 text-center mt-3">
-                4 transactions: Create, Set Budget, Approve USDT, Fund Escrow.
+                {jobType === "direct" ? "4 transactions: Create, Set Budget, Approve USDT, Fund Escrow." : "1 transaction: Create job on-chain."}
               </p>
             </motion.div>
           </>
