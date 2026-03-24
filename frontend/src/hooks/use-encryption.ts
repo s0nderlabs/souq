@@ -13,7 +13,7 @@ import { sendRelayEventAsync } from "@/lib/websocket";
 export function useEncryption() {
   const { wallets } = useWallets();
   const { address } = useAccount();
-  const [keypair, setKeypair] = useState<EncryptionKeypair | null>(getCachedKeypair);
+  const [keypair, setKeypair] = useState<EncryptionKeypair | null>(() => getCachedKeypair(address));
   const [deriving, setDeriving] = useState(false);
   const broadcastedRef = useRef(false);
 
@@ -34,7 +34,7 @@ export function useEncryption() {
           params: [message, address],
         });
         return result as string;
-      });
+      }, address);
 
       setKeypair(kp);
 
@@ -61,10 +61,10 @@ export function useEncryption() {
   }, [keypair, deriving, wallets, address]);
 
   const clear = useCallback(() => {
-    clearKeypair();
+    clearKeypair(address);
     setKeypair(null);
     broadcastedRef.current = false;
-  }, []);
+  }, [address]);
 
   return {
     keypair,

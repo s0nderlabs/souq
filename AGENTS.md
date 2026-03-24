@@ -111,7 +111,7 @@ Additional endpoints (x402-gated, require signed USDT payment per call):
 ### Job Lifecycle
 | Tool | Description |
 |------|-------------|
-| `create_job` | Post job with IPFS-pinned description, optional provider and compliance hook |
+| `create_job` | Post job with optional title and IPFS-pinned description, optional provider and compliance hook |
 | `set_provider` | Assign a provider to an open job (client only) |
 | `set_budget` | Propose budget amount in USDT (client or provider) |
 | `fund_job` | Lock USDT in escrow (client only, provider must be set) |

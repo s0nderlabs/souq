@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.2.2] - 2026-03-24
+
+### Added
+
+- Frontend: Separate job title field in create form, displayed as heading with description body
+- Frontend: Agent picker modal with search and filtering (replaces pill badges)
+- Frontend: Interactive mesh grid on landing page with cursor-tracking glow effect
+- Frontend: Encryption keypair caching in localStorage (eliminates signature prompt on reload)
+- Frontend: Agent names with profile links on job detail page
+- Frontend: Job expiry date display on job detail page
+- Frontend: Collapsible timeline (shows latest 3 events)
+- Plugin: Optional `title` parameter on `create_job` tool
+- Plugin: Title resolution in `get_job` and `list_jobs` responses
+- Relay: Title field in `/relay/jobs` and `/relay/jobs/:id` responses
+
+### Fixed
+
+- Frontend: Scrollbar layout shift on /jobs filter switch (hidden scrollbar globally)
+- Frontend: Shared `jobDisplayTitle` helper for consistent title truncation
+
 ## [1.2.1] - 2026-03-23
 
 ### Added

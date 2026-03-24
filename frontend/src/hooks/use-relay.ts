@@ -30,12 +30,12 @@ export function useRelay() {
   // Derive encryption keypair — separate effect so wallets changes don't cancel the timer
   const deriveKeypair = useCallback(async () => {
     if (derivedRef.current || !user?.wallet?.address) return;
-    if (getCachedKeypair()) {
+    const addr = user.wallet.address;
+    if (getCachedKeypair(addr)) {
       derivedRef.current = true;
-      const addr = user.wallet.address;
       await sendRelayEventAsync({
         type: "agent:ready",
-        data: { address: addr, encryptionPublicKey: getCachedKeypair()!.publicKeyHex },
+        data: { address: addr, encryptionPublicKey: getCachedKeypair(addr)!.publicKeyHex },
       });
       return;
     }
@@ -58,7 +58,7 @@ export function useRelay() {
           params: [message, wallet.address],
         });
         return sig as string;
-      });
+      }, user.wallet.address);
       await sendRelayEventAsync({
         type: "agent:ready",
         data: { address: user.wallet.address, encryptionPublicKey: kp.publicKeyHex },
@@ -83,7 +83,7 @@ export function useRelay() {
   useEffect(() => {
     if (ready && !authenticated && connectedRef.current) {
       disconnectRelay();
-      clearKeypair();
+      clearKeypair(walletAddress);
       connectedRef.current = false;
       derivedRef.current = false;
     }

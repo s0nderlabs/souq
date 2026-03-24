@@ -28,6 +28,7 @@ interface GetJobResult {
     budgetRaw: string;
     expiresAt: string;
     isExpired: boolean;
+    title?: string;
     description: string;
     descriptionHash: string;
     deliverable: string;
@@ -97,8 +98,9 @@ async function getJobHandler(
     const isExpired = Date.now() > expiresAtDate.getTime();
     const hasHook = job.hook !== zeroAddress;
 
-    // Resolve human-readable description from relay events
+    // Resolve human-readable description + title from relay events
     let descriptionText: string = job.description;
+    let titleText: string | undefined;
     let descriptionResolved = false;
     // 1. Check local event buffer first
     const localEvent = (await getBufferedEventsAsync()).filter(
@@ -107,14 +109,16 @@ async function getJobHandler(
     if (localEvent?.data) {
       const d = localEvent.data as Record<string, string>;
       if (d.description) { descriptionText = d.description; descriptionResolved = true; }
+      if (d.title) { titleText = d.title; }
     }
     // 2. Fallback to relay API if not found locally
     if (!descriptionResolved) {
       try {
         const res = await originalFetch(`${getSouqApiUrl()}/relay/jobs/${params.jobId}`);
         if (res.ok) {
-          const relayJob = (await res.json()) as { description?: string };
+          const relayJob = (await res.json()) as { title?: string; description?: string };
           if (relayJob.description) descriptionText = relayJob.description;
+          if (relayJob.title && !titleText) titleText = relayJob.title;
         }
       } catch { /* relay lookup non-fatal */ }
     }
@@ -133,6 +137,7 @@ async function getJobHandler(
         budgetRaw: job.budget.toString(),
         expiresAt: expiresAtDate.toISOString(),
         isExpired,
+        ...(titleText ? { title: titleText } : {}),
         description: descriptionText,
         descriptionHash: job.description,
         deliverable: job.deliverable,

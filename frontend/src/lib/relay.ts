@@ -5,6 +5,7 @@ export const relay = {
     fetch(`${API_URL}/relay/jobs?limit=${limit}`).then((r) => r.json()) as Promise<{
       jobs: Array<{
         jobId: number;
+        title: string | null;
         description: string | null;
         descriptionCid: string | null;
         client: string | null;
@@ -19,6 +20,7 @@ export const relay = {
   job: (id: number) =>
     fetch(`${API_URL}/relay/jobs/${id}`).then((r) => r.json()) as Promise<{
       jobId: number;
+      title: string | null;
       description: string | null;
       descriptionCid: string | null;
       timeline: Array<{ type: string; data: Record<string, unknown>; timestamp: number }>;

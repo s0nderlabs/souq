@@ -230,7 +230,7 @@ Both provider and evaluator must be compliant with ALL listed policies. The cont
 ### Job Lifecycle
 | Tool | Key Parameters |
 |------|---------------|
-| `create_job` | `description` (string), `evaluator` (address), `provider?` (address), `expiresInHours?` (24), `useHook?` (false) |
+| `create_job` | `title?` (string, 1-80 chars), `description` (string), `evaluator` (address), `provider?` (address), `expiresInHours?` (24), `useHook?` (false) |
 | `set_provider` | `jobId` (number), `provider` (address) |
 | `set_budget` | `jobId` (number), `amount` (string, e.g. "5") |
 | `fund_job` | `jobId` (number) |

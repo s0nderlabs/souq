@@ -19,6 +19,10 @@ import { escrowAbi } from "../abi/escrow.js";
 import { pinJson, cidToBytes32, toIpfsUri } from "../ipfs.js";
 
 const CreateJobSchema = z.object({
+  title: z
+    .string()
+    .optional()
+    .describe("Short job title (1-80 chars). Optional — description is used if omitted."),
   description: z
     .string()
     .describe("Job description text. Will be pinned to IPFS."),
@@ -68,6 +72,7 @@ interface CreateJobResult {
   message: string;
   job?: {
     jobId: string;
+    title?: string;
     descriptionCid: string;
     descriptionUri: string;
     txHash: string;
@@ -110,6 +115,7 @@ async function createJobHandler(
     // Pin description to IPFS
     const descriptionPayload = {
       type: "job_description",
+      ...(params.title ? { title: params.title } : {}),
       content: params.description,
       createdBy: clientAddress,
       createdAt: new Date().toISOString(),
@@ -199,13 +205,14 @@ async function createJobHandler(
       }
     }
 
-    sendRelayEvent({ type: "job:created", jobId: Number(jobId), data: { client: clientAddress, provider: params.provider, evaluator: params.evaluator, description: params.description, descriptionCid, txHash: txResult.hash } });
+    sendRelayEvent({ type: "job:created", jobId: Number(jobId), data: { client: clientAddress, provider: params.provider, evaluator: params.evaluator, ...(params.title ? { title: params.title } : {}), description: params.description, descriptionCid, txHash: txResult.hash } });
 
     return {
       success: true,
       message: `Job #${jobId} created successfully`,
       job: {
         jobId,
+        ...(params.title ? { title: params.title } : {}),
         descriptionCid,
         descriptionUri: toIpfsUri(descriptionCid),
         txHash: txResult.hash,

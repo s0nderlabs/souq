@@ -31,6 +31,7 @@ interface JobInfo {
   budget: string;
   status: string;
   expiredAt: string;
+  title?: string;
   description: string;
   deliverable: string;
   hook: string;
@@ -93,14 +94,16 @@ async function handler(params: z.infer<typeof Schema>): Promise<ListJobsResult> 
       };
     }
 
-    // Fetch description text from relay (batch — one call for all jobs)
+    // Fetch description + title text from relay (batch — one call for all jobs)
     const descriptionMap = new Map<number, string>();
+    const titleMap = new Map<number, string>();
     try {
       const res = await originalFetch(`${getSouqApiUrl()}/relay/jobs?limit=${limit}`);
       if (res.ok) {
-        const data = (await res.json()) as { jobs: Array<{ jobId: number; description: string | null }> };
+        const data = (await res.json()) as { jobs: Array<{ jobId: number; title: string | null; description: string | null }> };
         for (const j of data.jobs) {
           if (j.description) descriptionMap.set(j.jobId, j.description);
+          if (j.title) titleMap.set(j.jobId, j.title);
         }
       }
     } catch { /* relay lookup non-fatal */ }
@@ -151,6 +154,7 @@ async function handler(params: z.infer<typeof Schema>): Promise<ListJobsResult> 
         budget: job.budget === 0n ? "(not set)" : `${formatUnits(job.budget, USDT_DECIMALS)} USDT`,
         status: statusName,
         expiredAt: expiredAtDate.toISOString(),
+        ...(titleMap.get(id) ? { title: titleMap.get(id) } : {}),
         description: descriptionMap.get(id) || job.description,
         deliverable: job.deliverable,
         hook: job.hook === zeroAddress ? "(none)" : job.hook,

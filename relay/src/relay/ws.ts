@@ -144,6 +144,7 @@ export class SouqRelay extends DurableObject<Env> {
         const jid = row.job_id as number;
         return {
           jobId: row.job_id,
+          title: data.title || null,
           description: data.description || null,
           descriptionCid: data.descriptionCid || null,
           client: data.client || null,
@@ -173,20 +174,22 @@ export class SouqRelay extends DurableObject<Env> {
         return Response.json({ error: "Job not found in relay" }, { status: 404 });
       }
 
-      // Extract description from job:created event
+      // Extract title + description from job:created event
+      let title: string | null = null;
       let description: string | null = null;
       let descriptionCid: string | null = null;
       const timeline = rows.map((row: Record<string, unknown>) => {
         const payload = JSON.parse(row.payload as string) as Record<string, unknown>;
         const data = (payload.data || {}) as Record<string, unknown>;
         if (row.type === "job:created") {
+          title = (data.title as string) || null;
           description = (data.description as string) || null;
           descriptionCid = (data.descriptionCid as string) || null;
         }
         return { type: row.type, data, timestamp: row.ts };
       });
 
-      return Response.json({ jobId, description, descriptionCid, timeline });
+      return Response.json({ jobId, title, description, descriptionCid, timeline });
     }
 
     // HTTP endpoint for bids on a job

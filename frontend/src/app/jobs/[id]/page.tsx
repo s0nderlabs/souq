@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback, useEffect } from "react";
+import { use, useState, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useReadContract, usePublicClient, useWalletClient, useAccount } from "wagmi";
@@ -15,6 +15,8 @@ import { useEncryption } from "@/hooks/use-encryption";
 import { browserDecrypt, type EncryptedPackage } from "@/lib/encryption";
 import { relay } from "@/lib/relay";
 import { DeliverableViewer } from "@/components/deliverable-viewer";
+import { useAgents } from "@/hooks/use-agents";
+import { jobDisplayTitle } from "@/lib/format";
 
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts;
@@ -75,6 +77,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [deliverableText, setDeliverableText] = useState<string | null>(null);
   const [deliverableLoading, setDeliverableLoading] = useState(false);
   const [deliverableError, setDeliverableError] = useState<string | null>(null);
+  const [timelineExpanded, setTimelineExpanded] = useState(false);
+  const { data: agentsData } = useAgents();
 
   // Clear deliverable on wallet change/disconnect
   useEffect(() => {
@@ -162,6 +166,21 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const showBids = actualStatus === "open" && isZeroAddress(provider);
   const bids = bidData?.bids || [];
 
+  const agentName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of (agentsData?.agents || [])) {
+      if (a.name) map.set(a.address.toLowerCase(), a.name);
+    }
+    return (addr: string | null) => addr ? map.get(addr.toLowerCase()) || null : null;
+  }, [agentsData]);
+
+  // Expiry date from on-chain
+  const expiryTimestamp = onChainJob
+    ? Number(Array.isArray(onChainJob) ? onChainJob[4] : (onChainJob as unknown as Record<string, unknown>).expiredAt ?? 0)
+    : 0;
+  const expiresAt = expiryTimestamp > 0 ? new Date(expiryTimestamp * 1000) : null;
+  const isExpired = expiresAt ? Date.now() > expiresAt.getTime() : false;
+
   return (
     <div className="max-w-3xl mx-auto px-6 pt-8 pb-16">
       {/* Back link */}
@@ -183,41 +202,55 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <StatusBadge status={actualStatus} />
           </div>
           <h1 className="font-display italic text-2xl sm:text-3xl text-ink tracking-tight leading-tight">
-            {jobData.description || "Untitled job"}
+            {jobDisplayTitle(jobData.title, jobData.description)}
           </h1>
+          {jobData.description && (jobData.title || jobData.description.length > 80) && (
+            <p className="font-serif text-[14px] text-ink-light leading-relaxed mt-3">
+              {jobData.description}
+            </p>
+          )}
         </motion.div>
 
         {/* Participants + Budget */}
         <motion.div variants={fadeUp} className="rounded-2xl border border-border p-5 mb-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {client && (
-              <div>
-                <p className="font-mono text-[10px] text-ink-light/50 tracking-wider mb-1">Client</p>
-                <Address value={client} />
-              </div>
-            )}
-            {evaluator && (
-              <div>
-                <p className="font-mono text-[10px] text-ink-light/50 tracking-wider mb-1">Evaluator</p>
-                <Address value={evaluator} />
-              </div>
-            )}
-            {provider && !isZeroAddress(provider) ? (
-              <div>
-                <p className="font-mono text-[10px] text-ink-light/50 tracking-wider mb-1">Provider</p>
-                <Address value={provider} />
-              </div>
-            ) : (
-              <div>
-                <p className="font-mono text-[10px] text-ink-light/50 tracking-wider mb-1">Provider</p>
-                <span className="font-mono text-[12px] text-clay/70 italic">Open for bids</span>
-              </div>
-            )}
+            {[
+              { label: "Client", addr: client },
+              { label: "Evaluator", addr: evaluator },
+              { label: "Provider", addr: provider && !isZeroAddress(provider) ? provider : null },
+            ].map(({ label, addr }) => {
+              if (!addr && label !== "Provider") return null;
+              const name = addr ? agentName(addr) : null;
+              return (
+                <div key={label}>
+                  <p className="font-mono text-[10px] text-ink-light/50 tracking-wider mb-1">{label}</p>
+                  {!addr ? (
+                    <span className="font-mono text-[12px] text-clay/70 italic">Open for bids</span>
+                  ) : name ? (
+                    <Link href={`/agents/${addr}`} className="font-serif text-[13px] text-ink hover:text-clay transition-colors duration-200">
+                      {name}
+                      <span className="font-mono text-[10px] text-ink-light/40 ml-1.5">{addr.slice(0, 6)}...{addr.slice(-4)}</span>
+                    </Link>
+                  ) : (
+                    <Address value={addr} />
+                  )}
+                </div>
+              );
+            })}
             {budget && (
               <div>
                 <p className="font-mono text-[10px] text-ink-light/50 tracking-wider mb-1">Budget</p>
                 <p className="font-mono text-[15px] text-ink tabular-nums">
                   {budget} <span className="text-[11px] text-ink-light">USDT</span>
+                </p>
+              </div>
+            )}
+            {expiresAt && (
+              <div>
+                <p className="font-mono text-[10px] text-ink-light/50 tracking-wider mb-1">Expires</p>
+                <p className={`font-mono text-[13px] tabular-nums ${isExpired ? "text-fail" : "text-ink"}`}>
+                  {expiresAt.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {isExpired && <span className="text-[10px] text-fail ml-1.5">Expired</span>}
                 </p>
               </div>
             )}
@@ -665,7 +698,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
 
               <div className="space-y-0">
-                {[...timeline].reverse().map((event, i) => (
+                {(() => {
+                  const reversed = [...timeline].reverse();
+                  const visible = timelineExpanded ? reversed : reversed.slice(0, 3);
+                  return visible;
+                })().map((event, i) => (
                   <div key={i} className="relative pl-7 pb-5 last:pb-0">
                     {/* Dot */}
                     <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full border-2 border-border bg-cream flex items-center justify-center">
@@ -710,6 +747,22 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                 ))}
               </div>
+              {timeline.length > 3 && !timelineExpanded && (
+                <button
+                  onClick={() => setTimelineExpanded(true)}
+                  className="mt-3 ml-7 font-serif text-[12px] text-clay hover:text-clay-light transition-colors duration-200"
+                >
+                  Show all {timeline.length} events
+                </button>
+              )}
+              {timelineExpanded && timeline.length > 3 && (
+                <button
+                  onClick={() => setTimelineExpanded(false)}
+                  className="mt-3 ml-7 font-serif text-[12px] text-ink-light hover:text-ink transition-colors duration-200"
+                >
+                  Show less
+                </button>
+              )}
             </div>
           )}
         </motion.div>

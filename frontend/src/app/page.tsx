@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -15,12 +15,190 @@ const stagger = {
   visible: { transition: { staggerChildren: 0.1 } },
 };
 
+const GRID_COLS = 28;
+const GRID_ROWS = 18;
+const GRID_SPACING = 36;
+const GLOW_RADIUS = 180;
+
+function MeshGrid() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const mousePos = useRef({ x: -1000, y: -1000 });
+  const rafId = useRef<number>(0);
+
+  const { nodes, lines } = useMemo(() => {
+    const n: { x: number; y: number; baseOpacity: number }[] = [];
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const nx = c / GRID_COLS;
+        const ny = r / GRID_ROWS;
+        // Fade from bottom-right corner (1,1) outward — invisible past ~60% of the grid
+        const distFromBottomRight = Math.sqrt(
+          Math.pow(1 - nx, 2) + Math.pow(1 - ny, 2)
+        );
+        const baseOpacity = Math.max(0, Math.pow(Math.max(0, 1 - distFromBottomRight * 1.4), 2));
+        n.push({ x: c * GRID_SPACING, y: r * GRID_SPACING, baseOpacity });
+      }
+    }
+
+    const l: { x1: number; y1: number; x2: number; y2: number; baseOpacity: number; n1: number; n2: number }[] = [];
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const idx = r * GRID_COLS + c;
+        if (c < GRID_COLS - 1) {
+          l.push({
+            x1: n[idx].x, y1: n[idx].y,
+            x2: n[idx + 1].x, y2: n[idx + 1].y,
+            baseOpacity: Math.min(n[idx].baseOpacity, n[idx + 1].baseOpacity),
+            n1: idx, n2: idx + 1,
+          });
+        }
+        if (r < GRID_ROWS - 1) {
+          l.push({
+            x1: n[idx].x, y1: n[idx].y,
+            x2: n[idx + GRID_COLS].x, y2: n[idx + GRID_COLS].y,
+            baseOpacity: Math.min(n[idx].baseOpacity, n[idx + GRID_COLS].baseOpacity),
+            n1: idx, n2: idx + GRID_COLS,
+          });
+        }
+      }
+    }
+    return { nodes: n, lines: l };
+  }, []);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    mousePos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    mousePos.current = { x: -1000, y: -1000 };
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    // Listen on the parent (full page), not just the SVG
+    const parent = container.parentElement;
+    if (!parent) return;
+    parent.addEventListener("mousemove", handleMouseMove);
+    parent.addEventListener("mouseleave", handleMouseLeave);
+    return () => {
+      parent.removeEventListener("mousemove", handleMouseMove);
+      parent.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, [handleMouseMove, handleMouseLeave]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const nodeEls = svg.querySelectorAll<SVGCircleElement>("[data-node]");
+    const lineEls = svg.querySelectorAll<SVGLineElement>("[data-line]");
+
+    // Precompute static geometry into arrays (avoid DOM reads in hot path)
+    const nodeGeo = Array.from(nodeEls).map((el) => ({
+      el,
+      cx: parseFloat(el.getAttribute("cx") || "0"),
+      cy: parseFloat(el.getAttribute("cy") || "0"),
+      base: parseFloat(el.dataset.base || "0"),
+    }));
+    const lineGeo = Array.from(lineEls).map((el) => ({
+      el,
+      midX: (parseFloat(el.getAttribute("x1") || "0") + parseFloat(el.getAttribute("x2") || "0")) / 2,
+      midY: (parseFloat(el.getAttribute("y1") || "0") + parseFloat(el.getAttribute("y2") || "0")) / 2,
+      base: parseFloat(el.dataset.base || "0"),
+    }));
+
+    let prevMx = -1000, prevMy = -1000;
+
+    const update = () => {
+      const mx = mousePos.current.x;
+      const my = mousePos.current.y;
+
+      // Skip update if mouse hasn't moved
+      if (mx === prevMx && my === prevMy) {
+        rafId.current = requestAnimationFrame(update);
+        return;
+      }
+      prevMx = mx;
+      prevMy = my;
+
+      for (const { el, cx, cy, base } of nodeGeo) {
+        const dist = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
+        const glow = Math.max(0, 1 - dist / GLOW_RADIUS);
+        el.setAttribute("opacity", String(Math.min(base * 0.1 + glow * 0.55, 0.7)));
+        el.setAttribute("r", String(1.5 + glow * 2.5));
+      }
+
+      for (const { el, midX, midY, base } of lineGeo) {
+        const dist = Math.sqrt((mx - midX) ** 2 + (my - midY) ** 2);
+        const glow = Math.max(0, 1 - dist / GLOW_RADIUS);
+        el.setAttribute("opacity", String(Math.min(base * 0.06 + glow * 0.35, 0.5)));
+        el.setAttribute("stroke-width", String(0.5 + glow));
+      }
+
+      rafId.current = requestAnimationFrame(update);
+    };
+
+    rafId.current = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(rafId.current);
+  }, [nodes]);
+
+  const width = GRID_COLS * GRID_SPACING;
+  const height = GRID_ROWS * GRID_SPACING;
+
+  return (
+    <motion.div
+      ref={containerRef}
+      className="absolute bottom-0 right-0 pointer-events-none -z-10"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 2.5, delay: 0.6 }}
+    >
+      <svg
+        ref={svgRef}
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        className="translate-x-4 translate-y-4"
+      >
+        {lines.map((l, i) => (
+          <line
+            key={`l-${i}`}
+            data-line=""
+            data-base={l.baseOpacity}
+            x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+            stroke="#8B4C3B"
+            strokeWidth="0.5"
+            opacity={l.baseOpacity * 0.06}
+          />
+        ))}
+        {nodes.map((n, i) => (
+          n.baseOpacity > 0.02 && (
+            <circle
+              key={`n-${i}`}
+              data-node=""
+              data-base={n.baseOpacity}
+              cx={n.x} cy={n.y} r="1.5"
+              fill="#8B4C3B"
+              opacity={n.baseOpacity * 0.1}
+            />
+          )
+        ))}
+      </svg>
+    </motion.div>
+  );
+}
+
 export default function LandingPage() {
   const [role, setRole] = useState<"human" | "agent">("human");
   const [copied, setCopied] = useState(false);
 
   return (
     <div className="h-[calc(100dvh-52px)] relative flex flex-col items-center justify-center px-6 overflow-hidden">
+      <MeshGrid />
+
       {/* Centered hero group — this never moves */}
       <motion.div
         className="max-w-2xl w-full text-center"

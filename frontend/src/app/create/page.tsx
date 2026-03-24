@@ -11,7 +11,7 @@ import { zeroAddress, keccak256, toHex, encodePacked, parseUnits, decodeEventLog
 import { usePublicClient, useWalletClient } from "wagmi";
 import { ESCROW_ADDRESS, USDT_ADDRESS, USDT_DECIMALS, escrowAbi, usdtAbi } from "@/lib/contracts";
 import { PageHeader } from "@/components/page-header";
-import { useAgents } from "@/hooks/use-agents";
+import { AgentPicker } from "@/components/agent-picker";
 import { sendRelayEventAsync } from "@/lib/websocket";
 
 const SIGIL_HOOK = "0xEB5d16A2A2617e22ffDD85CD75f709E5eF0fb2EF";
@@ -49,14 +49,16 @@ const stepNumbers: Partial<Record<Step, number>> = {
 
 export default function CreateJobPage() {
   const { authenticated, login, ready, user } = usePrivy();
-  const { data: agentsData } = useAgents();
   const { wallets } = useWallets();
+  const [evalPickerOpen, setEvalPickerOpen] = useState(false);
+  const [provPickerOpen, setProvPickerOpen] = useState(false);
   const chainId = useChainId();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
   const isWrongChain = chainId !== sepolia.id;
 
   const [jobType, setJobType] = useState<JobType>("direct");
+  const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [evaluator, setEvaluator] = useState("");
   const [provider, setProvider] = useState("");
@@ -66,8 +68,6 @@ export default function CreateJobPage() {
   const [step, setStep] = useState<Step>("form");
   const [jobId, setJobId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const agents = agentsData?.agents || [];
 
   const handleCreate = useCallback(async () => {
     if (!authenticated) { login(); return; }
@@ -185,6 +185,7 @@ export default function CreateJobPage() {
           client: walletAddr,
           provider: jobType === "direct" ? provider : "",
           evaluator,
+          ...(title.trim() ? { title: title.trim() } : {}),
           description,
           descriptionCid: descHash,
           txHash: createHash,
@@ -211,11 +212,12 @@ export default function CreateJobPage() {
         : `Failed: ${msg.slice(0, 100)}`);
       setStep("error");
     }
-  }, [authenticated, login, walletClient, publicClient, isWrongChain, wallets, user, description, evaluator, provider, budget, jobType, enableCompliance, policyId]);
+  }, [authenticated, login, walletClient, publicClient, isWrongChain, wallets, user, title, description, evaluator, provider, budget, jobType, enableCompliance, policyId]);
 
   const handleReset = () => {
     setStep("form");
     setError(null);
+    setTitle("");
     setDescription("");
     setEvaluator("");
     setProvider("");
@@ -354,6 +356,19 @@ export default function CreateJobPage() {
         /* Form + error state */
         ) : (
           <>
+            {/* Title */}
+            <motion.div variants={fadeUp} className="mb-5">
+              <label className="font-mono text-[11px] text-ink-light tracking-wide block mb-2">Title</label>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="A short title for this job"
+                maxLength={80}
+                className="w-full px-4 py-3 rounded-xl border border-ink-light/20 bg-transparent font-serif text-[14px] text-ink placeholder:text-ink-light/30 focus:outline-none focus:border-clay/40 transition-colors duration-200"
+              />
+              <p className="font-serif text-[11px] text-ink-light/40 mt-1.5">Optional. Used as the job heading.</p>
+            </motion.div>
+
             {/* Description */}
             <motion.div variants={fadeUp} className="mb-5">
               <label className="font-mono text-[11px] text-ink-light tracking-wide block mb-2">Description</label>
@@ -369,44 +384,54 @@ export default function CreateJobPage() {
             {/* Evaluator */}
             <motion.div variants={fadeUp} className="mb-5">
               <label className="font-mono text-[11px] text-ink-light tracking-wide block mb-2">Evaluator Address</label>
-              <input
-                value={evaluator}
-                onChange={(e) => setEvaluator(e.target.value)}
-                placeholder="0x..."
-                className="w-full px-4 py-3 rounded-xl border border-ink-light/20 bg-transparent font-mono text-[13px] text-ink placeholder:text-ink-light/30 focus:outline-none focus:border-clay/40 transition-colors duration-200"
+              <div className="flex gap-2">
+                <input
+                  value={evaluator}
+                  onChange={(e) => setEvaluator(e.target.value)}
+                  placeholder="0x..."
+                  className="flex-1 px-4 py-3 rounded-xl border border-ink-light/20 bg-transparent font-mono text-[13px] text-ink placeholder:text-ink-light/30 focus:outline-none focus:border-clay/40 transition-colors duration-200"
+                />
+                <button
+                  onClick={() => setEvalPickerOpen(true)}
+                  className="px-4 py-3 rounded-xl border border-border font-serif text-[12px] text-ink-light hover:border-clay/40 hover:text-clay transition-colors duration-200 shrink-0"
+                >
+                  Browse
+                </button>
+              </div>
+              <AgentPicker
+                open={evalPickerOpen}
+                onClose={() => setEvalPickerOpen(false)}
+                onSelect={setEvaluator}
+                label="Select Evaluator"
+                exclude={provider}
               />
-              {agents.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {agents.slice(0, 5).map((a) => (
-                    <button key={a.address} onClick={() => setEvaluator(a.address)}
-                      className="px-2.5 py-1 rounded-full border border-border font-mono text-[10px] text-ink-light hover:border-clay/40 hover:text-clay transition-colors duration-200">
-                      {a.name || `${a.address.slice(0, 8)}...`}
-                    </button>
-                  ))}
-                </div>
-              )}
             </motion.div>
 
             {/* Provider (direct only) */}
             {jobType === "direct" && (
               <motion.div variants={fadeUp} className="mb-5">
                 <label className="font-mono text-[11px] text-ink-light tracking-wide block mb-2">Provider Address</label>
-                <input
-                  value={provider}
-                  onChange={(e) => setProvider(e.target.value)}
-                  placeholder="0x..."
-                  className="w-full px-4 py-3 rounded-xl border border-ink-light/20 bg-transparent font-mono text-[13px] text-ink placeholder:text-ink-light/30 focus:outline-none focus:border-clay/40 transition-colors duration-200"
+                <div className="flex gap-2">
+                  <input
+                    value={provider}
+                    onChange={(e) => setProvider(e.target.value)}
+                    placeholder="0x..."
+                    className="flex-1 px-4 py-3 rounded-xl border border-ink-light/20 bg-transparent font-mono text-[13px] text-ink placeholder:text-ink-light/30 focus:outline-none focus:border-clay/40 transition-colors duration-200"
+                  />
+                  <button
+                    onClick={() => setProvPickerOpen(true)}
+                    className="px-4 py-3 rounded-xl border border-border font-serif text-[12px] text-ink-light hover:border-clay/40 hover:text-clay transition-colors duration-200 shrink-0"
+                  >
+                    Browse
+                  </button>
+                </div>
+                <AgentPicker
+                  open={provPickerOpen}
+                  onClose={() => setProvPickerOpen(false)}
+                  onSelect={setProvider}
+                  label="Select Provider"
+                  exclude={evaluator}
                 />
-                {agents.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {agents.slice(0, 5).map((a) => (
-                      <button key={a.address} onClick={() => setProvider(a.address)}
-                        className="px-2.5 py-1 rounded-full border border-border font-mono text-[10px] text-ink-light hover:border-clay/40 hover:text-clay transition-colors duration-200">
-                        {a.name || `${a.address.slice(0, 8)}...`}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </motion.div>
             )}
 

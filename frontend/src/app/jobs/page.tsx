@@ -7,6 +7,7 @@ import { useJobs } from "@/hooks/use-jobs";
 import { StatusBadge } from "@/components/status-badge";
 import { Address, isZeroAddress } from "@/components/address";
 import { PageHeader } from "@/components/page-header";
+import { jobDisplayTitle } from "@/lib/format";
 
 const filters = ["all", "open", "needs_provider", "funded", "submitted", "completed"] as const;
 type Filter = (typeof filters)[number];
@@ -121,7 +122,7 @@ export default function JobsPage() {
                         <StatusBadge status={job.status} />
                       </div>
                       <p className="font-serif text-[15px] text-ink leading-snug truncate group-hover:text-clay transition-colors duration-300">
-                        {job.description || "Untitled job"}
+                        {jobDisplayTitle(job.title, job.description)}
                       </p>
                       <div className="flex items-center gap-4 mt-3">
                         {job.client && (

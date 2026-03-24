@@ -21,16 +21,58 @@ export interface EncryptionKeypair {
 
 let cachedKeypair: EncryptionKeypair | null = null;
 
+const STORAGE_PREFIX = "souq:enc:";
+
+/** Try to load keypair from localStorage for a given wallet address */
+function loadFromStorage(walletAddress: string): EncryptionKeypair | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_PREFIX + walletAddress.toLowerCase());
+    if (!stored) return null;
+    const { privateKey, publicKeyHex } = JSON.parse(stored);
+    const privBytes = hexToBytes(privateKey as `0x${string}`);
+    const pubBytes = hexToBytes(publicKeyHex as `0x${string}`);
+    return { privateKey: privBytes, publicKey: pubBytes, publicKeyHex };
+  } catch {
+    return null;
+  }
+}
+
+/** Save keypair to localStorage keyed by wallet address */
+function saveToStorage(walletAddress: string, keypair: EncryptionKeypair): void {
+  try {
+    localStorage.setItem(
+      STORAGE_PREFIX + walletAddress.toLowerCase(),
+      JSON.stringify({
+        privateKey: bytesToHex(keypair.privateKey),
+        publicKeyHex: keypair.publicKeyHex,
+      })
+    );
+  } catch { /* storage full or unavailable — non-fatal */ }
+}
+
 /**
  * Derive a deterministic secp256k1 keypair from a wallet signature.
  * Same wallet + same message → same signature → same keypair (RFC6979).
+ * Caches in memory and localStorage to avoid re-prompting on page reload.
  *
  * @param signMessage - Function that signs a message (from Privy useWallets)
+ * @param walletAddress - The wallet address (for localStorage key)
  */
 export async function deriveEncryptionKeypair(
-  signMessage: (message: string) => Promise<string>
+  signMessage: (message: string) => Promise<string>,
+  walletAddress?: string
 ): Promise<EncryptionKeypair> {
   if (cachedKeypair) return cachedKeypair;
+
+  // Try localStorage first
+  if (walletAddress) {
+    const stored = loadFromStorage(walletAddress);
+    if (stored) {
+      cachedKeypair = stored;
+      console.log("[souq] Encryption keypair loaded from cache:", stored.publicKeyHex.slice(0, 16) + "...");
+      return stored;
+    }
+  }
 
   // Sign a deterministic message — the signature becomes the entropy source
   const signature = await signMessage("souq:encryption:v1");
@@ -44,18 +86,35 @@ export async function deriveEncryptionKeypair(
   const publicKeyHex = bytesToHex(publicKey);
 
   cachedKeypair = { privateKey, publicKey, publicKeyHex };
+
+  // Persist to localStorage
+  if (walletAddress) {
+    saveToStorage(walletAddress, cachedKeypair);
+  }
+
   console.log("[souq] Encryption keypair derived:", publicKeyHex.slice(0, 16) + "...");
   return cachedKeypair;
 }
 
-/** Get cached keypair without triggering derivation */
-export function getCachedKeypair(): EncryptionKeypair | null {
-  return cachedKeypair;
+/** Get cached keypair without triggering derivation — also checks localStorage */
+export function getCachedKeypair(walletAddress?: string): EncryptionKeypair | null {
+  if (cachedKeypair) return cachedKeypair;
+  if (walletAddress) {
+    const stored = loadFromStorage(walletAddress);
+    if (stored) {
+      cachedKeypair = stored;
+      return stored;
+    }
+  }
+  return null;
 }
 
-/** Clear cached keypair (on logout) */
-export function clearKeypair(): void {
+/** Clear cached keypair (on logout/disconnect) */
+export function clearKeypair(walletAddress?: string): void {
   cachedKeypair = null;
+  if (walletAddress) {
+    try { localStorage.removeItem(STORAGE_PREFIX + walletAddress.toLowerCase()); } catch {}
+  }
 }
 
 // ── AES-256-GCM via Web Crypto ──
