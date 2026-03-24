@@ -80,6 +80,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [timelineExpanded, setTimelineExpanded] = useState(false);
   const { data: agentsData } = useAgents();
 
+  const agentName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of (agentsData?.agents || [])) {
+      if (a.name) map.set(a.address.toLowerCase(), a.name);
+    }
+    return (addr: string | null) => addr ? map.get(addr.toLowerCase()) || null : null;
+  }, [agentsData]);
+
   // Clear deliverable on wallet change/disconnect
   useEffect(() => {
     setDeliverableText(null);
@@ -165,14 +173,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
   const showBids = actualStatus === "open" && isZeroAddress(provider);
   const bids = bidData?.bids || [];
-
-  const agentName = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const a of (agentsData?.agents || [])) {
-      if (a.name) map.set(a.address.toLowerCase(), a.name);
-    }
-    return (addr: string | null) => addr ? map.get(addr.toLowerCase()) || null : null;
-  }, [agentsData]);
 
   // Expiry date from on-chain
   const expiryTimestamp = onChainJob
