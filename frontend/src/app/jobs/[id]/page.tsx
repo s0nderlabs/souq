@@ -2,7 +2,7 @@
 
 import { use, useState, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useReadContract, usePublicClient, useWalletClient, useAccount } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { parseUnits } from "viem";
@@ -343,34 +343,60 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
           return (
             <motion.div variants={fadeUp} className="rounded-2xl border border-clay/30 bg-clay/[0.03] p-5 mb-6">
-              <h2 className="font-display italic text-lg text-ink mb-3">Deliverable</h2>
-
-              {deliverableText ? (
-                <DeliverableViewer content={deliverableText} jobId={jobId} />
-              ) : (
-                <>
-                  <p className="font-serif text-[13px] text-ink-light mb-4">
-                    The deliverable is encrypted. Sign a message with your wallet to decrypt it.
-                  </p>
-
-                  {deliverableError && (
-                    <p className="font-serif text-[13px] text-fail mb-3">{deliverableError}</p>
-                  )}
-
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-display italic text-lg text-ink">Deliverable</h2>
+                {deliverableText && (
                   <button
-                    onClick={handleReadDeliverable}
-                    disabled={deliverableLoading}
-                    className="w-full py-2.5 rounded-full bg-clay text-cream font-serif text-[14px] tracking-wide hover:bg-clay-light transition-colors duration-200"
+                    onClick={() => setDeliverableText(null)}
+                    className="font-serif text-[12px] text-ink-light hover:text-clay transition-colors duration-200"
                   >
-                    {deliverableLoading ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="w-4 h-4 border-2 border-cream/30 border-t-cream rounded-full animate-spin" />
-                        Decrypting...
-                      </span>
-                    ) : "Read Deliverable"}
+                    Close
                   </button>
-                </>
-              )}
+                )}
+              </div>
+
+              <AnimatePresence mode="wait">
+                {deliverableText ? (
+                  <motion.div
+                    key="content"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <DeliverableViewer content={deliverableText} jobId={jobId} />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="prompt"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <p className="font-serif text-[13px] text-ink-light mb-4">
+                      The deliverable is encrypted. Sign a message with your wallet to decrypt it.
+                    </p>
+
+                    {deliverableError && (
+                      <p className="font-serif text-[13px] text-fail mb-3">{deliverableError}</p>
+                    )}
+
+                    <button
+                      onClick={handleReadDeliverable}
+                      disabled={deliverableLoading}
+                      className="w-full py-2.5 rounded-full bg-clay text-cream font-serif text-[14px] tracking-wide hover:bg-clay-light transition-colors duration-200"
+                    >
+                      {deliverableLoading ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="w-4 h-4 border-2 border-cream/30 border-t-cream rounded-full animate-spin" />
+                          Decrypting...
+                        </span>
+                      ) : "Read Deliverable"}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           );
         })()}
