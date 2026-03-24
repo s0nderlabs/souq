@@ -166,10 +166,28 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     onChainStatus = JOB_STATUS[statusVal]?.toLowerCase() || "open";
   }
 
-  // Relay first (real-time), on-chain only for expired/edge cases
-  const actualStatus = relayStatus !== "open" ? relayStatus
-    : onChainStatus === "expired" ? "expired"
-    : onChainStatus || relayStatus;
+  // On-chain terminal states (completed, rejected, expired) always win — relay events can be lost
+  const TERMINAL = ["completed", "rejected", "expired"];
+  const actualStatus = TERMINAL.includes(onChainStatus || "")
+    ? onChainStatus!
+    : relayStatus !== "open"
+      ? relayStatus
+      : onChainStatus || relayStatus;
+
+  // Inject synthetic timeline entry if on-chain has a terminal state the relay missed
+  if (onChainStatus && TERMINAL.includes(onChainStatus)) {
+    const hasTerminalEvent = timeline.some(
+      (e) => e.type === `job:${onChainStatus}`
+    );
+    if (!hasTerminalEvent) {
+      const lastTs = timeline.length > 0 ? timeline[timeline.length - 1].timestamp : Date.now();
+      timeline.push({
+        type: `job:${onChainStatus}`,
+        data: { synthetic: true },
+        timestamp: lastTs + 1,
+      });
+    }
+  }
 
   const showBids = actualStatus === "open" && isZeroAddress(provider);
   const bids = bidData?.bids || [];
