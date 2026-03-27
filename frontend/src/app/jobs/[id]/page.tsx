@@ -9,7 +9,7 @@ import { parseUnits } from "viem";
 import { useJob, useBids } from "@/hooks/use-job";
 import { StatusBadge } from "@/components/status-badge";
 import { Address, isZeroAddress } from "@/components/address";
-import { ESCROW_ADDRESS, USDT_ADDRESS, USDT_DECIMALS, escrowAbi, usdtAbi, JOB_STATUS } from "@/lib/contracts";
+import { ESCROW_ADDRESS, USDT_ADDRESS, USDT_DECIMALS, escrowAbi, usdtAbi, TERMINAL_STATUSES, parseOnChainJobStatus } from "@/lib/contracts";
 import { sendRelayEventAsync } from "@/lib/websocket";
 import { useEncryption } from "@/hooks/use-encryption";
 import { browserDecrypt, type EncryptedPackage } from "@/lib/encryption";
@@ -157,25 +157,19 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           : "open";
 
   // On-chain status — fallback for edge cases (expired jobs have no relay event)
-  let onChainStatus: string | null = null;
-  if (onChainJob) {
-    const jobResult = onChainJob as unknown;
-    const statusVal = Array.isArray(jobResult)
-      ? Number(jobResult[8])
-      : Number((jobResult as Record<string, unknown>).status ?? (jobResult as unknown[])[8] ?? 0);
-    onChainStatus = JOB_STATUS[statusVal]?.toLowerCase() || "open";
-  }
+  const onChainStatus: string | null = onChainJob
+    ? parseOnChainJobStatus(onChainJob)
+    : null;
 
   // On-chain terminal states (completed, rejected, expired) always win — relay events can be lost
-  const TERMINAL = ["completed", "rejected", "expired"];
-  const actualStatus = TERMINAL.includes(onChainStatus || "")
+  const actualStatus = TERMINAL_STATUSES.has(onChainStatus || "")
     ? onChainStatus!
     : relayStatus !== "open"
       ? relayStatus
       : onChainStatus || relayStatus;
 
   // Inject synthetic timeline entry if on-chain has a terminal state the relay missed
-  if (onChainStatus && TERMINAL.includes(onChainStatus)) {
+  if (onChainStatus && TERMINAL_STATUSES.has(onChainStatus)) {
     const hasTerminalEvent = timeline.some(
       (e) => e.type === `job:${onChainStatus}`
     );

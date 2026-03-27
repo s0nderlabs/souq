@@ -17,6 +17,17 @@ export const JOB_STATUS: Record<number, string> = {
   5: "Expired",
 };
 
+export const TERMINAL_STATUSES = new Set(["completed", "rejected", "expired"]);
+
+/** Parse the raw `getJob` return (tuple or object) into a lowercase status string. */
+export function parseOnChainJobStatus(jobResult: unknown): string {
+  const raw = jobResult as readonly unknown[];
+  const statusVal = Array.isArray(raw)
+    ? Number(raw[8])
+    : Number((jobResult as Record<string, unknown>).status ?? 0);
+  return JOB_STATUS[statusVal]?.toLowerCase() || "open";
+}
+
 export const escrowAbi = [
   { type: "function", name: "getJob", inputs: [{ name: "jobId", type: "uint256" }], outputs: [{ name: "client", type: "address" }, { name: "provider", type: "address" }, { name: "evaluator", type: "address" }, { name: "budget", type: "uint256" }, { name: "expiredAt", type: "uint256" }, { name: "description", type: "bytes32" }, { name: "deliverable", type: "bytes32" }, { name: "hook", type: "address" }, { name: "status", type: "uint8" }], stateMutability: "view" },
   { type: "function", name: "jobCount", inputs: [], outputs: [{ name: "", type: "uint256" }], stateMutability: "view" },

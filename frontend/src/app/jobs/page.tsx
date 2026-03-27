@@ -3,13 +3,13 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { useJobs } from "@/hooks/use-jobs";
+import { useJobsWithOnChainStatus } from "@/hooks/use-jobs";
 import { StatusBadge } from "@/components/status-badge";
 import { Address, isZeroAddress } from "@/components/address";
 import { PageHeader } from "@/components/page-header";
 import { jobDisplayTitle } from "@/lib/format";
 
-const filters = ["all", "open", "needs_provider", "funded", "submitted", "completed"] as const;
+const filters = ["all", "open", "needs_provider", "funded", "submitted", "completed", "rejected", "expired"] as const;
 type Filter = (typeof filters)[number];
 
 const filterLabels: Record<Filter, string> = {
@@ -19,6 +19,8 @@ const filterLabels: Record<Filter, string> = {
   funded: "Funded",
   submitted: "Submitted",
   completed: "Completed",
+  rejected: "Rejected",
+  expired: "Expired",
 };
 
 function timeAgo(ts: number): string {
@@ -39,7 +41,7 @@ const fadeUp = {
 
 export default function JobsPage() {
   const [filter, setFilter] = useState<Filter>("all");
-  const { data, isLoading } = useJobs(100);
+  const { data, isLoading } = useJobsWithOnChainStatus(100);
 
   const filtered = useMemo(() => {
     if (!data?.jobs) return [];
