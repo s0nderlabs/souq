@@ -7,6 +7,8 @@ import { BOOTSTRAP_LIMIT } from "../types";
  *
  * Gives new agents N free calls before x402 kicks in.
  * Bootstrap record is created when the agent claims faucet tokens.
+ * KV write is fire-and-forget via waitUntil — a 429 from KV quota
+ * won't crash the request, and writes are self-limiting (max 50/wallet).
  *
  * Flow:
  * 1. No wallet header → pass through to x402
@@ -38,9 +40,11 @@ export const bootstrapMiddleware = createMiddleware<AppContext>(
       return;
     }
 
-    // Has free calls remaining — increment and mark as verified
+    // Has free calls remaining — increment and persist (fire-and-forget)
     record.callCount += 1;
-    await c.env.BOOTSTRAP_KV.put(key, JSON.stringify(record));
+    c.executionCtx.waitUntil(
+      c.env.BOOTSTRAP_KV.put(key, JSON.stringify(record)).catch(() => {})
+    );
 
     c.set("paymentVerified", true);
     c.set("paymentAmount", 0n);

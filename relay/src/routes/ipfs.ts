@@ -42,10 +42,12 @@ ipfs.post("/pin", async (c) => {
 
   const result = (await pinataRes.json()) as { IpfsHash: string };
 
-  // Cache content in KV for instant retrieval (avoids IPFS gateway propagation delays)
-  await c.env.BOOTSTRAP_KV.put(`ipfs:${result.IpfsHash}`, JSON.stringify(json), {
-    expirationTtl: 86400 * 7, // 7 days
-  });
+  // Cache content in KV for instant retrieval (fire-and-forget — KV quota exhaustion is non-fatal)
+  c.executionCtx.waitUntil(
+    c.env.BOOTSTRAP_KV.put(`ipfs:${result.IpfsHash}`, JSON.stringify(json), {
+      expirationTtl: 86400 * 7,
+    }).catch(() => {})
+  );
 
   return c.json({ cid: result.IpfsHash });
 });
