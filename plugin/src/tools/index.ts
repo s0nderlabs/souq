@@ -19,6 +19,8 @@ import { registerCheckCompliance } from "./check-compliance.js";
 import { registerGetNotifications } from "./get-notifications.js";
 import { registerReadDeliverable } from "./read-deliverable.js";
 import { registerApplyForJob } from "./apply-for-job.js";
+import { registerListBids } from "./list-bids.js";
+import { registerSendCounterOffer } from "./send-counter-offer.js";
 
 export function registerTools(server: McpServer): void {
   // Wallet
@@ -35,6 +37,8 @@ export function registerTools(server: McpServer): void {
   registerRejectJob(server);
   registerClaimRefund(server);
   registerApplyForJob(server);
+  registerListBids(server);
+  registerSendCounterOffer(server);
 
   // Read
   registerGetJob(server);

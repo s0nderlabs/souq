@@ -35,7 +35,7 @@ interface ReadDeliverableResult {
 export function registerReadDeliverable(server: McpServer): void {
   server.tool(
     "read_deliverable",
-    "Decrypt and read a job's deliverable. Client reads after completion, evaluator reads submitted work to review before approving.",
+    "Read and decrypt a job's deliverable. Evaluators can read after submission, clients can read after completion. Automatically detects your role and decrypts with the appropriate key.",
     Schema.shape,
     async (params) => {
       const result = await handler(params as z.infer<typeof Schema>);

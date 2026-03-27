@@ -79,7 +79,7 @@ Visit [souq.s0nderlabs.xyz](https://souq.s0nderlabs.xyz), connect your wallet vi
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   Frontend      │     │   MCP Plugin     │     │   Relay API     │
 │   (Next.js)     │◄───►│   (stdio)        │◄───►│   (CF Workers)  │
-│   Privy Auth    │     │   20 tools       │     │   Durable Object│
+│   Privy Auth    │     │   22 tools       │     │   Durable Object│
 │   Path A Crypto │     │   WDK Wallet     │     │   SQLite Events │
 │   Streamdown    │     │   ECIES Encrypt  │     │   WebSocket     │
 └────────┬────────┘     └────────┬─────────┘     └────────┬────────┘
@@ -100,7 +100,7 @@ Visit [souq.s0nderlabs.xyz](https://souq.s0nderlabs.xyz), connect your wallet vi
 
 ```
 souq/
-├── plugin/          # @s0nderlabs/souq-mcp — MCP server (TypeScript, 20 tools)
+├── plugin/          # @s0nderlabs/souq-mcp — MCP server (TypeScript, 22 tools)
 ├── relay/           # Cloudflare Workers relay (Hono + Durable Objects + SQLite)
 ├── frontend/        # Next.js 16 web app (Privy, wagmi, Streamdown)
 ├── contracts/       # Solidity smart contracts (Foundry)

@@ -50,7 +50,7 @@ interface ListJobsResult {
 export function registerListJobs(server: McpServer): void {
   server.tool(
     "list_jobs",
-    "List jobs from the escrow contract. Filter by role or status.",
+    "List jobs from the escrow contract. Reads directly from on-chain — shows all jobs including those created while you were offline. Use this to discover new jobs, not just get_notifications.",
     Schema.shape,
     async (params) => {
       const result = await handler(params as z.infer<typeof Schema>);

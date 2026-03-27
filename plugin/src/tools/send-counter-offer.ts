@@ -1,41 +1,39 @@
-// Apply for Job — Agent bids on an open-market job (Type 2 bid-first flow)
-// Sends a directed bid message to the client via the relay.
+// Send Counter-Offer — Client sends a counter-offer to a bidder
 // Copyright (c) 2026 s0nderlabs
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { zeroAddress } from "viem";
 import { getAddress, getPublicClient } from "../protocol.js";
 import { ESCROW_ADDRESS } from "../config.js";
 import { escrowAbi, JOB_STATUS } from "../abi/escrow.js";
 import { sendRelayEvent } from "../relay.js";
 
 const Schema = z.object({
-  jobId: z.number().describe("The job ID to apply/bid for."),
+  jobId: z.number().describe("The job ID to send a counter-offer for."),
+  to: z.string().describe("Wallet address of the bidder to counter."),
   proposedBudget: z
     .string()
-    .describe("Proposed budget in human-readable USDT (e.g. '10')."),
-  pitch: z
+    .describe("Your counter-offer budget in human-readable USDT (e.g. '5')."),
+  message: z
     .string()
-    .describe("Brief pitch explaining why you're a good fit for this job."),
+    .describe("Message explaining the counter-offer."),
 });
 
-interface ApplyForJobResult {
+interface CounterOfferResult {
   success: boolean;
   message: string;
-  bid?: {
+  counterOffer?: {
     jobId: number;
+    to: string;
     proposedBudget: string;
-    bidder: string;
-    sentTo: string;
   };
   error?: string;
 }
 
-export function registerApplyForJob(server: McpServer): void {
+export function registerSendCounterOffer(server: McpServer): void {
   server.tool(
-    "apply_for_job",
-    "Bid on an open-market job. Use list_bids first to see existing bids and price competitively. Sends your bid to the client via the relay.",
+    "send_counter_offer",
+    "Send a counter-offer to a bidder on your job. Only the client can counter-offer. Use list_bids to see existing bids first.",
     Schema.shape,
     async (params) => {
       const result = await handler(params as z.infer<typeof Schema>);
@@ -46,12 +44,11 @@ export function registerApplyForJob(server: McpServer): void {
   );
 }
 
-async function handler(params: z.infer<typeof Schema>): Promise<ApplyForJobResult> {
+async function handler(params: z.infer<typeof Schema>): Promise<CounterOfferResult> {
   try {
     const callerAddress = await getAddress();
     const publicClient = getPublicClient();
 
-    // Read job to validate it's an open-market job
     const job = (await publicClient.readContract({
       address: ESCROW_ADDRESS,
       abi: escrowAbi,
@@ -59,52 +56,49 @@ async function handler(params: z.infer<typeof Schema>): Promise<ApplyForJobResul
       args: [BigInt(params.jobId)],
     })) as {
       client: string;
-      provider: string;
       status: number;
     };
+
+    if (job.client.toLowerCase() !== callerAddress.toLowerCase()) {
+      return {
+        success: false,
+        message: "Only the job client can send counter-offers.",
+        error: "Not the client",
+      };
+    }
 
     if (job.status !== 0) {
       return {
         success: false,
         message: `Job is not Open. Current status: ${JOB_STATUS[job.status as keyof typeof JOB_STATUS] ?? job.status}`,
-        error: "Can only bid on Open jobs",
+        error: "Can only counter-offer on Open jobs",
       };
     }
 
-    if (job.provider !== zeroAddress) {
-      return {
-        success: false,
-        message: "Job already has a provider assigned. This is not an open-market job.",
-        error: "Provider already set",
-      };
-    }
-
-    // Send bid as a directed relay message to the client
     sendRelayEvent({
-      type: "job:bid",
+      type: "job:counter",
       jobId: params.jobId,
-      to: job.client.toLowerCase(),
+      to: params.to.toLowerCase(),
       data: {
         proposedBudget: params.proposedBudget,
-        pitch: params.pitch,
-        bidder: callerAddress,
+        message: params.message,
+        from: callerAddress,
       },
     });
 
     return {
       success: true,
-      message: `Bid sent for Job #${params.jobId}: ${params.proposedBudget} USDT`,
-      bid: {
+      message: `Counter-offer sent for Job #${params.jobId}: ${params.proposedBudget} USDT`,
+      counterOffer: {
         jobId: params.jobId,
+        to: params.to,
         proposedBudget: `${params.proposedBudget} USDT`,
-        bidder: callerAddress,
-        sentTo: job.client,
       },
     };
   } catch (error) {
     return {
       success: false,
-      message: "Failed to apply for job",
+      message: "Failed to send counter-offer",
       error: error instanceof Error ? error.message : String(error),
     };
   }

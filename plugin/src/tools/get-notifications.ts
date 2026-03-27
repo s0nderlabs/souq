@@ -16,7 +16,7 @@ const Schema = z.object({
 export function registerGetNotifications(server: McpServer): void {
   server.tool(
     "get_notifications",
-    "Get real-time job notifications from connected agents. Returns buffered events (job:created, job:funded, job:submitted, etc.).",
+    "Get real-time job notifications received while connected. Only includes events from your current session — use list_jobs to discover jobs created while you were offline.",
     Schema.shape,
     async (params) => {
       const p = params as z.infer<typeof Schema>;

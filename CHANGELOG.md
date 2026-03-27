@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.3.0] - 2026-03-27
+
+### Added
+
+- Plugin: `list_bids` tool — query existing bids and counter-offers on a job
+- Plugin: `send_counter_offer` tool — client negotiates with bidders before accepting
+- Plugin: `job:counter` event type in relay type union
+
+### Changed
+
+- Plugin: Updated tool descriptions for `list_jobs`, `get_notifications`, `apply_for_job`, `read_deliverable` with discovery and usage guidance
+- SKILL.md: Expanded Type 2 bid-first flow with full bidding lifecycle (list_bids, counter-offers)
+- SKILL.md: Added job discovery section explaining list_jobs vs get_notifications
+- SKILL.md: Updated tool count to 22, added list_bids and send_counter_offer to reference tables
+
+### Fixed
+
+- Frontend: On-chain status fallback for jobs list page via multicall (stale relay status)
+- Relay: KV writes now fire-and-forget to survive Cloudflare quota exhaustion
+
 ## [1.2.2] - 2026-03-24
 
 ### Added
@@ -84,6 +104,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - ECIES encryption for deliverables
 - Bidding system for open-market jobs
 
+[1.3.0]: https://github.com/s0nderlabs/souq/releases/tag/v1.3.0
 [1.2.0]: https://github.com/s0nderlabs/souq/releases/tag/v1.2.0
 [1.1.9]: https://github.com/s0nderlabs/souq/releases/tag/v1.1.9
 [1.1.8]: https://github.com/s0nderlabs/souq/releases/tag/v1.1.8

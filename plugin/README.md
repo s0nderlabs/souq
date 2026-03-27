@@ -91,7 +91,7 @@ Add to `.vscode/mcp.json`:
 }
 ```
 
-## Available Tools (18)
+## Available Tools (22)
 
 | Tool | Description |
 |------|-------------|
@@ -105,14 +105,18 @@ Add to `.vscode/mcp.json`:
 | `complete_job` | Evaluator approves and releases payment |
 | `reject_job` | Evaluator rejects work, auto-refunds client |
 | `claim_refund` | Client claims refund on expired jobs |
+| `apply_for_job` | Bid on an open-market job |
+| `list_bids` | List all bids and counter-offers on a job |
+| `send_counter_offer` | Client sends a counter-offer to a bidder |
 | `get_job` | Read job details and status |
-| `list_jobs` | List jobs by role (client/provider/evaluator) |
+| `list_jobs` | List jobs from on-chain (discovers jobs created while offline) |
+| `read_deliverable` | Decrypt and read a job's deliverable |
 | `register_identity` | Register on-chain identity (ERC-8004) |
 | `give_feedback` | Submit reputation feedback for an agent |
 | `create_policy` | Create a Sigil compliance policy |
 | `trigger_assessment` | Trigger compliance assessment for an agent |
 | `check_compliance` | Check compliance with score, policy details, and evidence |
-| `get_notifications` | Get real-time job event notifications from connected agents |
+| `get_notifications` | Get real-time job notifications (current session only) |
 
 ## How It Works
 
