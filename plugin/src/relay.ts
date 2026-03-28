@@ -172,13 +172,20 @@ export function sendRelayEvent(event: Omit<RelayEvent, "from" | "timestamp">): v
   // HTTP POST fallback — only when WS failed (avoids duplicate storage)
   if (!wsSent) {
     const apiUrl = getSouqApiUrl();
-    fetch(`${apiUrl}/relay/events`, {
+    const wallet = walletAddress || fullEvent.from;
+    fetch(`${apiUrl}/relay/events?wallet=${wallet}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(fullEvent),
-    }).catch(() => {
-      console.error(`[souq] Event ${fullEvent.type} lost — both WS and HTTP failed`);
-    });
+    })
+      .then((res) => {
+        if (!res.ok) {
+          console.error(`[souq] Event ${fullEvent.type} HTTP fallback failed: ${res.status}`);
+        }
+      })
+      .catch(() => {
+        console.error(`[souq] Event ${fullEvent.type} lost — both WS and HTTP failed`);
+      });
   }
 }
 

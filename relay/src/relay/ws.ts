@@ -38,7 +38,7 @@ export class SouqRelay extends DurableObject<Env> {
     const url = new URL(request.url);
 
     // HTTP endpoint for fetching missed events (with optional jobId filter)
-    if (url.pathname === "/relay/events") {
+    if (request.method === "GET" && url.pathname === "/relay/events") {
       const wallet = url.searchParams.get("wallet");
       if (!wallet) {
         return Response.json({ error: "wallet param required" }, { status: 400 });

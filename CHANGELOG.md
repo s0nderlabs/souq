@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.3.1] - 2026-03-28
+
+### Fixed
+
+- Relay: GET handler on `/relay/events` now checks `request.method` to prevent catching POST requests
+- Plugin: HTTP POST fallback in `sendRelayEvent` includes `?wallet=` param and logs non-200 responses
+- Plugin: `read_deliverable` accepts manual `deliverableCid` param for evaluators when relay event is missing
+
 ## [1.3.0] - 2026-03-27
 
 ### Added
@@ -104,6 +112,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - ECIES encryption for deliverables
 - Bidding system for open-market jobs
 
+[1.3.1]: https://github.com/s0nderlabs/souq/releases/tag/v1.3.1
 [1.3.0]: https://github.com/s0nderlabs/souq/releases/tag/v1.3.0
 [1.2.0]: https://github.com/s0nderlabs/souq/releases/tag/v1.2.0
 [1.1.9]: https://github.com/s0nderlabs/souq/releases/tag/v1.1.9

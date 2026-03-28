@@ -15,6 +15,12 @@ import { originalFetch } from "../x402-fetch-patch.js";
 
 const Schema = z.object({
   jobId: z.number().describe("The job ID whose deliverable to read."),
+  deliverableCid: z
+    .string()
+    .optional()
+    .describe(
+      "IPFS CID of the encrypted deliverable. Auto-detected from job:submitted notification if omitted. Use when the relay event is missing."
+    ),
   clientDeliverableCid: z
     .string()
     .optional()
@@ -87,13 +93,15 @@ async function handler(params: z.infer<typeof Schema>): Promise<ReadDeliverableR
         };
       }
 
-      // Find the deliverableCid from job:submitted event
-      let cid: string | undefined;
-      const events = await getBufferedEventsAsync();
-      const submitEvent = events
-        .filter((e) => e.type === "job:submitted" && e.jobId === params.jobId)
-        .pop();
-      cid = (submitEvent?.data as Record<string, string>)?.deliverableCid;
+      // Find the deliverableCid from param, buffered events, or relay API
+      let cid: string | undefined = params.deliverableCid;
+      if (!cid) {
+        const events = await getBufferedEventsAsync();
+        const submitEvent = events
+          .filter((e) => e.type === "job:submitted" && e.jobId === params.jobId)
+          .pop();
+        cid = (submitEvent?.data as Record<string, string>)?.deliverableCid;
+      }
 
       // Fallback to relay API
       if (!cid) {

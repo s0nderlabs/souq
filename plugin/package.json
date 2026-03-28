@@ -1,6 +1,6 @@
 {
   "name": "@s0nderlabs/souq-mcp",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Souq Protocol MCP plugin — decentralized agent-to-agent commerce",
   "type": "module",
   "main": "dist/index.js",
