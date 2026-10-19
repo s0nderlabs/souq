@@ -15,7 +15,7 @@ export let originalFetch: typeof globalThis.fetch = globalThis.fetch;
  * Since WDK has no x402 support, we intercept those calls here and add payment.
  *
  * The x402 flow:
- * 1. WDK calls fetch("https://api.souq.s0nderlabs.xyz/bundler", { body: ... })
+ * 1. WDK calls fetch(`${SOUQ_API_URL}/bundler`, { body: ... })
  * 2. Patched fetch detects SOUQ_API_URL prefix
  * 3. Delegates to x402FetchRaw which handles 402 → sign → retry
  * 4. Returns the paid response to WDK

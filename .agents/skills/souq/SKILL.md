@@ -314,4 +314,4 @@ All have defaults. No configuration needed.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WDK_SEED` | auto-generated | BIP-39 seed phrase |
-| `SOUQ_API_URL` | `https://api.souq.s0nderlabs.xyz` | Backend relay (all traffic routes through here) |
+| `SOUQ_API_URL` | `https://api.souq.s0nderlabs.com` | Backend relay (all traffic routes through here) |

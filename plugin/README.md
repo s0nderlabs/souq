@@ -133,7 +133,7 @@ All have sensible defaults. No configuration needed for standard usage.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SOUQ_API_URL` | `https://api.souq.s0nderlabs.xyz` | Backend relay URL |
+| `SOUQ_API_URL` | `https://api.souq.s0nderlabs.com` | Backend relay URL |
 | `WDK_SEED` | Auto-generated to `~/.souq/seed` | BIP-39 seed phrase |
 
 ## Architecture

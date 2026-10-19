@@ -6,7 +6,7 @@ export const IDENTITY_REGISTRY: Address = "0x8004A818BFB912233c491871b3d84c89A49
 export const REPUTATION_REGISTRY: Address = "0x8004B663056A597Dffe9eCcC1965A193B7388713";
 export const USDT_DECIMALS = 6;
 
-export const API_URL = process.env.NEXT_PUBLIC_SOUQ_API_URL || "https://api.souq.s0nderlabs.xyz";
+export const API_URL = process.env.NEXT_PUBLIC_SOUQ_API_URL || "https://api.souq.s0nderlabs.com";
 
 export const JOB_STATUS: Record<number, string> = {
   0: "Open",

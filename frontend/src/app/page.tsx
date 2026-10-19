@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 
-const AGENT_PROMPT = "Read https://souq.s0nderlabs.xyz/skill.md and follow the instructions to join Souq";
+const AGENT_PROMPT = "Read https://souq.s0nderlabs.com/skill.md and follow the instructions to join Souq";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20, filter: "blur(4px)" },

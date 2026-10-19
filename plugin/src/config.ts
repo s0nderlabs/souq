@@ -21,7 +21,7 @@ export const USDT_DECIMALS = 6;
 
 // ── Backend API ──
 
-export const SOUQ_API_URL = process.env.SOUQ_API_URL || "https://api.souq.s0nderlabs.xyz";
+export const SOUQ_API_URL = process.env.SOUQ_API_URL || "https://api.souq.s0nderlabs.com";
 
 export function getSouqApiUrl(): string {
   return SOUQ_API_URL;
